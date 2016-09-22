@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # coding=utf-8
-# Module contains collection of tools for analitical continuation of complex
-# function to real energy axis by Pade approximant.
+# Program make analitical continuation of complex function defined on Matsubara frequency
+# to real energy using Pade approximant. This version is mpmath based. 
 
 import sys
 import argparse
@@ -10,7 +10,7 @@ import os.path
 try:
     from mpmath import mp, im, re, fdiv, mpc, fp, workdps
 except ImportError:
-    print 'Please install mpmath Python module or use numpy based version of pade.py'
+    print('Please install mpmath Python module or use numpy based version of pade.py')
     raise
 import math
 import time
@@ -27,12 +27,6 @@ def main():
     print_params(logfile)
     print_params()
     fp.dps = 12
-
-    if ls:
-        qq2 = 21       # WTF?
-    else:
-        qq2 = 1
-
     w, f = readsigma(infile)
     e = make_e_mesh(emin, de, npts)
     w1 = []
@@ -50,7 +44,8 @@ def main():
 
     for ipo in range(npo[0], npo[1], 1):
         for ine in range(ne[0], ne[1]):
-            for q1 in range(0, qq2, 2):
+            for q1 in range(0, ipo//4, 2):
+#             for q1 in range(0, qq2, 2):
                 sys.stdout.flush()
                 for qq in range(0, nrandomcycle):
                     if (ine + ipo) % 2 != 0:
@@ -105,12 +100,12 @@ def main():
                         for mm in moments:
                             s += '{:12.4f}'.format(mm)
                             # s += '{:18s}'.format(mp.nstr(mm, n=4))
-                        s = '{:4d} {:4d} {:4d} {:4d} {:18.12f} {:s} {:24s}'. \
+                        s = '{:4d} {:4d} {:4d} {:4d}     {:18.12f} {:s}  {:24s}'. \
                             format(ipo, ine, qq, q1, float(delta), s, used_solver)
                         print('%s' % s)
                         s += '\n'
                     else:
-                        s = '{:4d} {:4d} {:4d} {:4d} {:18.12f}    {:24s} {:d}'. \
+                        s = '{:4d} {:4d} {:4d} {:4d}     {:18.12f}    {:24s} {:d}'. \
                             format(ipo, ine, qq, q1, float(delta), used_solver, memusage)
                         print('%s' % s)
                         s += '\n'
@@ -265,7 +260,7 @@ def handle_commandline():
     parser.add_argument("-ls", action='store_true',
                         help="Use non-diagonal form of Pade coefficients matrix "
                              "[default: %(default)s]")
-    parser.add_argument("-npo", nargs=2, default=(40, 100), type=int,
+    parser.add_argument("-npo", nargs=2, default=(30, 90), type=int,
                         help="number of input iw points "
                              "[default: %(default)s]")
     parser.add_argument("-use_ne", action='store_true',
@@ -294,8 +289,6 @@ def handle_commandline():
                  'random': args.random,
                  'ls': args.ls,
                  'npo': args.npo,
-                 # 'npo1':args.npo[0],
-                 # 'npo2':args.npo[1],
                  'use_ne': args.use_ne,
                  'ne': args.ne,
                  'nrandomcycle': args.nrandomcycle,
@@ -324,9 +317,13 @@ def handle_input():
     ls = inputdata['ls']
     npo = inputdata['npo']
     use_ne = inputdata['use_ne']
-    ne = inputdata['ne']
-    infile = inputdata['f']
-    infile = os.path.abspath(infile)
+    if use_ne:
+        ne = inputdata['ne']
+    else:
+        ne = (0,1)
+    # ne = inputdata['ne']
+    # infile = inputdata['f']
+    infile = os.path.abspath(inputdata['f'])
     if not os.path.exists(infile):
         raise TypeError('File %s not exist' % infile)
     logfile = inputdata['logfile']
@@ -410,19 +407,18 @@ def choose_random_points(e, f, nneg, npos):
 
 
 def choose_prandom_points(e, f, nneg, npos):
-    # Subroutine selects from input nneg+npos points
-    # first nneg+npos-nrnd points are selected sequently,
-    # then nrnd points are picked randomly
-    # Number of randomly selected points nrnd is determined randomly in interval (4, 18)
-    # e -- input complex array with energy points
-    # f -- input complex array with values of function in points e[i]
-
-    nrnd = random.randrange(4, 18, 2)
-
+    """
+    Subroutine selects from input nneg+npos points: first nneg+npos-nrnd points are selected 
+    sequently, then nrnd points are picked randomly. Number of randomly selected points nrnd 
+    is determined randomly in interval from 1/16 to 1/3 of total number of points.
+    e -- input complex array with energy points
+    f -- input complex array with values of function in points e[i]
+    """
     if (nneg + npos) % 2 != 0:
         print('Number of chosen points should be even!', nneg, npos, nneg + npos)
         npos += 1
     q = nneg + npos
+    nrnd = random.randrange(q//16, q//3, 2)
     r = len(e)
     ee = fp.zeros(q, 1)
     ff = fp.zeros(q, f.cols)
@@ -432,7 +428,6 @@ def choose_prandom_points(e, f, nneg, npos):
     for i in range(nneg, q - nrnd):
         ee[i] = e[i - nneg]
         ff[i] = f[i - nneg]
-
     # Make list of random points
     pp = random.sample(range(q - nrnd, r - 1), nrnd)
     # Sort them
@@ -598,7 +593,7 @@ def pade_ls_coefficients(f, e, n):
         pq = mp.lu_solve(x, s)
         # success = True
     # except ZeroDivisionError as err:
-    except ZeroDivisionError:
+    except (ZeroDivisionError, ValueError):
         # if 'matrix is numerically singular' in err.message:
         try:
             pq = mp.qr_solve(x, s)
@@ -809,11 +804,11 @@ def write_g_re(filename, e, sigma):
 def calc_residual(f1, f2):
     l1 = len(f1)
     if l1 != len(f2):
-        print 'WARNING: calc_residual'
+        print('WARNING: calc_residual')
         print('Lengths of f1 and f2 are different!\n')
-    d = sum([pow(f1[i] - f2[i], 2) for i in range(l1)])
+    d = pow(sum([pow(f1[i] - f2[i], 2) for i in range(l1)]), 0.5)
     d /= l1
-    return d
+    return float(abs(d))
 
     # d = 0.0
     # f1 -= f2
@@ -826,19 +821,14 @@ def calc_residual(f1, f2):
 def calc_mean(m):
     a = mp.dps
     mp.dps = 8
-
     l = len(m)
-
     tmp = [0.0, 0.0, 0.0]
     for i in range(0, l):
         for j in range(0, 3):
             tmp[j] += m[i][j]
     for i in range(0, 3):
         tmp[i] /= l
-    print tmp
-
     mp.dps = a
-
     return tmp
 
 

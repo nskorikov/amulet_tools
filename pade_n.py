@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Module contains collection of tools for analitical continuation of complex
-# function to real energy axis by Pade approximant.
+# Program make analitical continuation of complex function defined on Matsubara frequency
+# to real energy using Pade approximant. This version is Numpy based. 
 
 import sys
 import argparse
 import os.path
 import numpy as np
 import time
+from numbers import Real
 # from math import exp
 # from scipy import linalg
 # import matplotlib.pyplot as plt
@@ -21,10 +22,6 @@ def main():
     handle_input()
     print_params(logfile)
     print_params()
-    if ls:
-        qq2 = 21       # WTF?
-    else:
-        qq2 = 1
 
     w, f = readsigma(infile)
     e = make_e_mesh(emin, de, npts)
@@ -37,14 +34,15 @@ def main():
     mmts = np.zeros((0, 3), dtype=np.float64)
 
     if not use_moments:
-        print('%4s %4s %4s %4s %20s %11s %12s %12s\b' % ('npo', 'nne', 'try', 'ils',
+        print('%4s %4s %4s %4s %14s %12s %12s %12s\b' % ('npo', 'nne', 'try', 'ils',
                                                          'delta', 'm0', 'm1', 'm2'))
     else:
         print('%4s %4s %4s %4s %10s' % ('npo', 'nne', 'try', 'ils', 'delta'))
 
     for ipo in range(npo[0], npo[1], 1):
         for ine in range(ne[0], ne[1]):
-            for q1 in range(0, qq2, 2):
+            for q1 in range(0, ipo//4, 2):
+#             for q1 in range(0, qq2, 2):
                 sys.stdout.flush()
                 for qq in range(0, nrandomcycle):
                     if (ine + ipo) % 2 != 0:
@@ -53,14 +51,9 @@ def main():
                     sys.stdout.write('%4i %4i %4i %4i %s\r' % (ipo, ine, qq, q1, " " * 16))
 
                     if randomp:
-                        # tmp = choose_prandom_points(w, f, ine, ipo)      # the best shape, the worst moments
-                        e1, f1 = choose_prandom_points(w, f, ine, ipo)
+                        e1, f1 = choose_prandom_points(w, f, ine, ipo)     # the best shape, the worst moments
                     else:
-                        # tmp = choose_seq_points_plus(w, f, ine, ipo)     # work only with pade_ls_coeff
-                        # tmp = choose_seq_points(w, f, ine, ipo)          # work only with pade_ls_coeff
                         e1, f1 = choose_seq_points(w, f, ine, ipo)
-                    # tmp = choose_points(w, f, nne, npo)                  # manual selection
-                    # tmp = choose_random_points(w, f, nne, npo)           # bad idea
 
                     if use_moments:
                         f1[:, 0] = make_f_prime(f1[:, 0], e1, m)
@@ -75,10 +68,6 @@ def main():
                     else:
                         pq = pq[0]
 
-                    # use external information about momenta
-                    # if use_moments:
-                    #     pq = usemoments(pq, m)
-
                     if use_moments:
                         sigim = pade_m(pq, w, m)
                     else:
@@ -87,8 +76,8 @@ def main():
                     if not is_imag_negative(w, sigim):
                         continue
                     delta = calc_residual(f, sigim)
-                    if delta > 1.00001:
-                        continue
+#                     if delta > 5.00001:
+#                         continue
                     if use_moments:
                         sigre = pade_m(pq, e, m)
                     else:
@@ -100,12 +89,12 @@ def main():
                     if not use_moments:
                         moments = get_moments(pq)
                         mmts = np.vstack([mmts, moments])
-                        s = '{0:16.3f} {1:16.3f} {2:16.3f}'.\
+                        s = '{0:12.3f} {1:12.3f} {2:12.3f}'.\
                             format(moments[0], moments[1], moments[2])
-                        s = '{:4d} {:4d} {:4d} {:4d} {:12.9f} {:s}'.\
+                        s = '{:4d} {:4d} {:4d} {:4d}     {:12.9f} {:s}'.\
                             format(ipo, ine, qq, q1, float(delta), s)
                         print('%s' % s)
-                        s += '\n'
+                        s += '\n'                          # Why add EOF to string after print?????
                     else:
                         s = '{:4d} {:4d} {:4d} {:4d} {:12.9f}'.\
                             format(ipo, ine, qq, q1, float(delta))
@@ -118,7 +107,7 @@ def main():
                     solutions.append(sigre)
 
                     # Write continued function to the disk
-                    if delta < 0.000100005:
+                    if delta < 0.100000005:
                         outfile = 'imG_' + str(ine) + '_' + str(ipo) + '_' + \
                                   str(q1) + '_' + str(qq) + '.dat'
                         write_g_im(outfile, w, sigim)
@@ -157,13 +146,30 @@ def main():
         minute = (run_time // 60) - (hour * 60)
         sec = run_time % 60
         print('Program runtime = %2i:%2i:%2i' % (hour, minute, sec))
+    
+    analise(w1, solutions, e)
 
+    print("Stop at %s" % time.ctime())
+    end_time = time.time()
+    run_time = end_time - start_time
+    print(run_time)
+    hour = (run_time // 60) // 60
+    minute = run_time // 60 - hour * 60
+    sec = run_time % 60
+
+    print('Program runtime = %i:%i:%i' % (hour, minute, sec))
+    
+
+def analise(w1, solutions, e):
+
+    qq = len(w1)
     w = 0.0
     w3 = np.zeros(len(w1))
     for i in range(0, qq):
         # w1[i] = 1 / w1[i]
         w1[i] = float(w1[i])
         w3[i] = 200000 * (min(w1) - w1[i])
+        print(w1[i], w3[i], np.exp(w3[i]))
     w2 = np.exp(w3)
     for i in range(0, qq):
         w3[i] = w1[i]
@@ -192,21 +198,13 @@ def main():
             s = '{:16.12f} {:16.12f} {:16.12f}\n'.format(float(w3[i]), float(w1[i]), float(w2[i]) * 10)
             # s = '{:d} {:16.12f} {:16.12f}\n'.format(i, float(w1[i]), float(w2[i]))
             f.write(s)
-
-    print("Stop at %s" % time.ctime())
-    end_time = time.time()
-    run_time = end_time - start_time
-    print(run_time)
-    hour = (run_time // 60) // 60
-    minute = run_time // 60 - hour * 60
-    sec = run_time % 60
-
-    print('Program runtime = %i:%i:%i' % (hour, minute, sec))
     
+    pass
+
 
 def handle_commandline():
     """
-    Define possible commandline keys and them default values, parse commandline and 
+    Subroutine defines possible commandline keys and them default values, parse commandline and 
     return dictionary 'inputdata'  
     """
     parser = argparse.ArgumentParser()
@@ -303,7 +301,10 @@ def handle_input():
     ls = inputdata['ls']
     npo = inputdata['npo']
     use_ne = inputdata['use_ne']
-    ne = inputdata['ne']
+    if use_ne:
+        ne = inputdata['ne']
+    else:
+        ne = (0,1)
     infile = inputdata['f']
     infile = os.path.abspath(infile)
     if not os.path.exists(infile):
@@ -387,17 +388,14 @@ def choose_random_points(e, f, nneg, npos):
 
 
 def choose_prandom_points(e, f, nneg, npos):
-    # Subroutine selects from input nneg+npos points
-    # first nneg+npos-nrnd points are selected sequently,
-    # then nrnd points are picked randomly
-    # Number of randomly selected points nrnd is determined randomly in interval (4, 18)
-    # e -- input complex array with energy points
-    # f -- input complex array with values of function in points e[i]
-
-    nrnd = np.random.randint(low=4, high=18)
-    # if nrnd % 2 != 0:
-    #     nrnd += 1
-    # nrnd = 6
+    """
+    Subroutine selects from input nneg+npos points: first nneg+npos-nrnd points are selected 
+    sequently, then nrnd points are picked randomly. Number of randomly selected points nrnd 
+    is determined randomly in interval from 1/16 to 1/3 of total number of points.
+    e -- input complex array with energy points
+    f -- input complex array with values of function in points e[i]
+    """
+    nrnd = np.random.randint(low=(npos+nneg)//16, high=(npos+nneg)//3)
     if (nneg + npos) % 2 != 0:
         print('Number of chosen points should be even!', nneg, npos, nneg + npos)
         npos += 1
@@ -483,7 +481,7 @@ def choose_seq_points(e, f, nneg, npos):
 
 
 def choose_seq_points_plus(e, f, nneg, npos):
-    # Choose first nneg+npos-2 and last two points
+    # Choose first nneg+npos-2 and the last two points
 
     if (nneg + npos) % 2 != 0:
         print('Number of chosen points should be even!', nneg, npos, nneg + npos)
@@ -504,10 +502,11 @@ def choose_seq_points_plus(e, f, nneg, npos):
 
 
 def pade_coeficients(f, e):
-    # Subroutine pade_coeficients() finds coefficient of Pade approximant
-    # f - values of complex function for approximation
-    # e - complex points in which function f is determined
-
+    """
+    Subroutine pade_coeficients() finds coefficient of Pade approximant
+    f - values of complex function for approximation
+    e - complex points in which function f is determined
+    """
     r = len(e) // 2
     # Preparation of arrays to calc Pade coefficiens
     s = np.zeros(2 * r, dtype=np.complex128)
@@ -538,11 +537,12 @@ def pade_coeficients(f, e):
 
 
 def pade_ls_coefficients(f, e, n):
-    # Subroutine pade_ls_coeficients() finds coefficient of Pade approximant by Least Squares method
-    # f - values of complex function for approximation
-    # e - complex points in which function z is determined
-    # n - number of coefficients, should be less than number of points in e (n<m)
-
+    """
+    Subroutine pade_ls_coeficients() finds coefficient of Pade approximant by Least Squares method
+    f - values of complex function for approximation
+    e - complex points in which function z is determined
+    n - number of coefficients, should be less than number of points in e (n<m)
+    """
     m = len(e)
     r = n // 2
     # Preparation of arrays to calc Pade coefficiens
@@ -560,9 +560,6 @@ def pade_ls_coefficients(f, e, n):
     #                   X = | |
     #                       |q|
 
-    # pq = linalg.lstsq(x, s)[0]
-    # success = True
-
     try:
         pq = np.linalg.lstsq(x, s)[0]
         success = True
@@ -576,11 +573,12 @@ def pade_ls_coefficients(f, e, n):
 
 
 def pade(coef, e, shift=0):
-    # Calculation of analitical function on a arbitrary mesh for a given Pade coefficient
-    # e -  energy mesh (can be complex or real)
-    # coef - Pade coefficients
-    # shift - shift of indexes due to using of moments of function
-
+    """
+    Calculation of analitical function on a arbitrary mesh for a given Pade coefficient
+    e -  energy mesh (can be complex or real)
+    coef - Pade coefficients
+    shift - shift of indexes due to using of moments of function
+    """
     nlines = len(e)
     r = len(coef) // 2
     f = np.zeros(nlines, dtype=np.complex128)
@@ -595,18 +593,18 @@ def pade(coef, e, shift=0):
             p += pq[i] * e[iw] ** (i - shift)
         for i in range(0, r + 1):
             q += pq[i + r] * e[iw] ** (i - shift)
-
         f[iw] = np.divide(p, q)
     return f
 
 
 def pade_m(coef, e, m):
-    # Calculation of analitical function on a arbitrary mesh for a given Pade coefficient
-    # and first known momenta of function
-    # e -  energy mesh (can be complex or real)
-    # coef - Pade coefficients
-    # m - first three momenta of function
-
+    """
+    Calculation of analitical function on a arbitrary mesh for a given Pade coefficient
+    and first known momenta of function
+    e -  energy mesh (can be complex or real)
+    coef - Pade coefficients
+    m - first three momenta of function
+    """
     nlines = len(e)
     r = len(coef) // 2
     f = np.zeros(nlines, dtype=np.complex128)
@@ -629,7 +627,11 @@ def pade_m(coef, e, m):
 
 
 def make_f_prime(f, e, m):
-    # F'(z) = z^3 * [F(z) - p_n/z - p'_n/z^2 - p''_n/z^3]
+    """
+    Replace considered function by expression:
+    F'(z) = z^3 * [F(z) - p_n/z - p'_n/z^2 - p''_n/z^3],
+    where F(z) - initial function, p_n, p'_n, p''_n -- first 3 momenta of function
+    """
     r = len(e)
     fn = np.zeros(r, dtype=np.complex128)
     for i in range(0, r):
@@ -638,7 +640,9 @@ def make_f_prime(f, e, m):
 
 
 def get_moments(coef):
-    # returns moments of function calculated from coefficients of Pade decomposition
+    """
+    Subroutine returns first 3 momenta of function, basing of coefficients of Pade decomposition
+    """
     n = len(coef) // 2
     p = np.ones(n, dtype=np.complex128)
     q = np.ones(n, dtype=np.complex128)
@@ -654,25 +658,11 @@ def get_moments(coef):
     # return s
 
 
-def usemoments(coef, moments):
-    # Subroutine uses known moments of function to change coefficients of Pade decomposition
-    # p_{n-1} = m_{0}
-    # p_{n-2} = m_{1}+m_{0}*q_{n-1}
-    # p_{n-2} = m_{2}+m_{1}*q_{n-1}+m_{0}*q_{n-2}
-
-    n = len(coef) // 2
-
-    coef[n-1] = moments[0]
-    coef[n-2] = moments[1] + moments[0] * coef[-1]
-    coef[n-3] = moments[2] + moments[1] * coef[-1] + moments[0] * coef[-2]
-    return coef
-
-
 def readsigma(filename):
-    # Read sigma from AMULET.
-
+    """
+    Read sigma in format of AMULET.
+    """
     print('Input file contains:')
-
     with open(filename, 'r') as f:
         data = f.readlines()
 
@@ -737,43 +727,26 @@ def readsigma(filename):
 
 def write_g_im(filename, e, sigma):
     nlines = len(e)
-    with open(filename, 'w') as f:
-        for iw in range(0, nlines):
-            s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.\
-                format(e.imag[iw], sigma.real[iw], sigma.imag[iw])
-            f.write(s)
+    with open(filename, 'w') as fout:
+        for iw,f in zip(e, sigma):
+            s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.format(iw.imag, f.real, f.imag)
+            fout.write(s)
+#         for iw in range(0, nlines):
+#             s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.\
+#                 format(e.imag[iw], sigma.real[iw], sigma.imag[iw])
+#             fout.write(s)
 
 
 def write_g_re(filename, e, sigma):
     nlines = len(e)
-    with open(filename, 'w') as f:
-        for iw in range(0, nlines):
-            s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.\
-                format(e.real[iw], sigma.real[iw], sigma.imag[iw])
-            f.write(s)
-
-
-# def calc_residual(f1, f2):
-#     l1 = len(f1)
-#     if l1 != len(f2):
-#         print('WARNING: calc_residual')
-#         print('Lengths of f1 and f2 are different!\n')
-#     d = sum([pow(f1[i] - f2[i], 2) for i in range(l1)])
-#     d /= l1
-#     return d
-
-# def calc_residual(f1, f2):
-#     l1 = len(f1)
-#     l2 = len(f2)
-#     if l1 != len(f2):
-#         print('WARNING: calc_residual')
-#         print('Lengths of f1 and f2 are different!\n')
-#     d = 0.0
-#     for i in range(0, l1):
-#         d += (f1.real[i] - f2.real[i]) ** 2
-#         d += (f1.imag[i] - f2.imag[i]) ** 2
-#     d /= l1
-#     return d
+    with open(filename, 'w') as fout:
+        for iw,f in zip(e, sigma):
+            s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.format(iw.real, f.real, f.imag)
+            fout.write(s)
+#         for iw in range(0, nlines):
+#             s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.\
+#                 format(e.real[iw], sigma.real[iw], sigma.imag[iw])
+#             fout.write(s)
 
 
 def calc_residual(f1, f2):
@@ -782,7 +755,7 @@ def calc_residual(f1, f2):
         print('WARNING: calc_residual')
         print('Lengths of f1 and f2 are different!\n')
         raise
-    d = np.sum(np.absolute(np.power(f1-f2, 2)))
+    d = np.power(np.sum(np.absolute(np.power(f1-f2, 2))), 0.5)
     d /= l1
     return d
 
