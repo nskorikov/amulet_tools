@@ -1,11 +1,12 @@
 #!/usr/bin/python
 # coding=utf-8
 # Program make analitical continuation of complex function defined on Matsubara frequency
-# to real energy using Pade approximant. This version is mpmath based. 
+# to real energy using Pade approximant. This version is mpmath based.
 
 import sys
 import argparse
 import os.path
+from mpmath.functions.rszeta import coef
 
 try:
     from mpmath import mp, im, re, fdiv, mpc, fp, workdps
@@ -18,6 +19,7 @@ import random
 import resource
 
 fp.dps = 12
+
 
 def main():
     print('Start at %s ' % time.ctime())
@@ -44,8 +46,12 @@ def main():
 
     for ipo in range(npo[0], npo[1], 1):
         for ine in range(ne[0], ne[1]):
-            for q1 in range(0, ipo//4, 2):
-#             for q1 in range(0, qq2, 2):
+            if ls:
+                qq2 = ipo//4
+            else:
+                qq2 = 1
+#             for q1 in range(0, ipo//4, 2):
+            for q1 in range(0, qq2, 2):
                 sys.stdout.flush()
                 for qq in range(0, nrandomcycle):
                     if (ine + ipo) % 2 != 0:
@@ -66,7 +72,11 @@ def main():
                     if use_moments:
                         f1[:, 0] = make_f_prime(f1[:, 0], e1, m)
 
-                    pq, success, used_solver = pade_ls_coefficients(f1[:, 0], e1, ipo + ine - q1)
+                    if ls:
+                        pq, success, used_solver = pade_ls_coefficients(f1[:, 0], e1, ipo + ine - q1)
+                    else:
+                        pq, success = pade_coeficients(f1[:, 0], e1)
+                        used_solver = ''
 
                     if not success:
                         continue
@@ -217,7 +227,7 @@ def main():
 
         f.write('       %f       ' % run_time)
         f.write('Program runtime = %i:%i:%i' % (hour, minute, sec))
-    
+
 
 # class InData:
 #
@@ -320,7 +330,7 @@ def handle_input():
     if use_ne:
         ne = inputdata['ne']
     else:
-        ne = (0,1)
+        ne = (0, 1)
     # ne = inputdata['ne']
     # infile = inputdata['f']
     infile = os.path.abspath(inputdata['f'])
@@ -531,7 +541,7 @@ def pade_coeficients(f, e):
     # f - values of complex function for approximation
     # e - complex points in which function f is determined
 
-    r = len(e) / 2
+    r = len(e) // 2
     # Preparation of arrays to calc Pade coefficiens
     s = mp.zeros(2 * r, 1)
     x = mp.zeros(2 * r)
@@ -569,7 +579,7 @@ def pade_ls_coefficients(f, e, n):
     # n - number of coefficients, should be less than number of points in e (n<m)
 
     m = len(e)
-    r = n / 2
+    r = n // 2
     # Preparation of arrays to calc Pade coefficiens
     s = mp.zeros(m, 1)
     x = mp.zeros(m, n)
@@ -618,7 +628,7 @@ def pade(coef, e):
     # coef - Pade coefficients
 
     nlines = len(e)
-    r = len(coef) / 2
+    r = len(coef) // 2
     f = mp.zeros(nlines, 1)
     # pq = mp.ones(r * 2 + 1, 1)
     # for i in range(0, r):
@@ -629,7 +639,8 @@ def pade(coef, e):
         q = mp.mpc(0.0)
         for i in range(0, r):
             p += coef[i] * e[iw] ** i
-        for i in range(0, r + 1):
+        for i in range(0, r ):
+#             print(i, r, i+r)
             q += coef[i + r] * e[iw] ** i
 
         # f[iw] = np.divide(p, q)
@@ -646,7 +657,7 @@ def pade_m(coef, e, m):
     # m - first three momenta of function
 
     nlines = len(e)
-    r = len(coef) / 2
+    r = len(coef) // 2
     f = mp.zeros(nlines, 1)
     pq = mp.ones(r * 2 + 1, 1)
     # for i in range(0, r):
@@ -680,7 +691,7 @@ def make_f_prime(f, e, m):
 
 def get_moments(coef):
     # returns moments of function calculated from coefficients of Pade decomposition
-    n = len(coef) / 2
+    n = len(coef) // 2
     # for i in range(0, n):
     #     p[i] = coef[i]
     #     q[i] = coef[i + n]
@@ -704,7 +715,7 @@ def usemoments(coef, moments):
     # p_{n-2} = m_{1}+m_{0}*q_{n-1}
     # p_{n-2} = m_{2}+m_{1}*q_{n-1}+m_{0}*q_{n-2}
 
-    n = len(coef) / 2
+    n = len(coef) // 2
 
     coef[n - 1] = moments[0]
     coef[n - 2] = moments[1] + moments[0] * coef[-1]
@@ -737,12 +748,12 @@ def readsigma(filename):
     if ndatasets == 0 and not data[-1].split():
         ndatasets += 1
         blank_lines_ending = 1
-        nlinesperblock = (nlines + 1) / ndatasets
+        nlinesperblock = (nlines + 1) // ndatasets
     elif ndatasets == 0 and data[-1].split():
         ndatasets += 1
-        nlinesperblock = (nlines + 2) / ndatasets
+        nlinesperblock = (nlines + 2) // ndatasets
     else:
-        nlinesperblock = nlines / ndatasets
+        nlinesperblock = nlines // ndatasets
     print(" Number of datasets: %i " % ndatasets)
 
     # nlinesperblock = nlines / ndatasets
@@ -750,7 +761,7 @@ def readsigma(filename):
 
     # Take the last dataset from data file
     data = data[nlinesperblock * (ndatasets - 1): (nlinesperblock * ndatasets) -
-                                                  blank_lines_ending]
+                blank_lines_ending]
     nlines = len(data)
     s = data[0].split()
 
@@ -845,11 +856,11 @@ def is_imag_negative(w, f):
 if __name__ == "__main__":
     main()
 
-        # Plotting example
-        # nlines = len(e)
-        # diff = np.zeros(nlines, dtype=mp.mpc)
-        # for i in range(0, len(e)):
-        #     diff[i] = float(z.real[i,0]-sigma.real[i]) + 1j * float(z.imag[i,0]-sigma.imag[i])
-        # plt.plot(e.imag, diff.real, '-', e.imag, diff.imag, '--')
-        # plt.plot(e.imag, z.real[:,0], '-', e.imag, z.imag[:,0], '-', e.imag, sigma.real, '--', e.imag, sigma.imag, '--')
-        # plt.show()
+    # Plotting example
+    # nlines = len(e)
+    # diff = np.zeros(nlines, dtype=mp.mpc)
+    # for i in range(0, len(e)):
+    #     diff[i] = float(z.real[i,0]-sigma.real[i]) + 1j * float(z.imag[i,0]-sigma.imag[i])
+    # plt.plot(e.imag, diff.real, '-', e.imag, diff.imag, '--')
+    # plt.plot(e.imag, z.real[:,0], '-', e.imag, z.imag[:,0], '-', e.imag, sigma.real, '--', e.imag, sigma.imag, '--')
+    # plt.show()

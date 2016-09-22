@@ -13,9 +13,9 @@ from numbers import Real
 # from scipy import linalg
 # import matplotlib.pyplot as plt
 
-def main():
-    print('Start at %s ' % time.ctime())
-    start_time = time.time()
+def main(): 
+    print('Start at %s ' % time.ctime()) 
+    start_time = time.time()   
     # size, smooth, source, target, concurrency = handle_commandline()
 
     # infile, emin, de, npts, use_moments, randomp, ls, npo, use_ne, ne, m = handle_input()
@@ -41,8 +41,12 @@ def main():
 
     for ipo in range(npo[0], npo[1], 1):
         for ine in range(ne[0], ne[1]):
-            for q1 in range(0, ipo//4, 2):
-#             for q1 in range(0, qq2, 2):
+            if ls:
+                qq2 = ipo//4
+            else:
+                qq2 = 1
+            for q1 in range(0, qq2, 2):
+            # for q1 in range(0, ipo//4, 2):
                 sys.stdout.flush()
                 for qq in range(0, nrandomcycle):
                     if (ine + ipo) % 2 != 0:
@@ -212,12 +216,12 @@ def handle_commandline():
                         help="file with input function "
                         "[default: %(default)s]")
     parser.add_argument("-logfile", default="sets.dat",
-                        help="file for log, new data will be appended to existent "
+                        help="file for log, new data will be appended to existent"
                         "[default: %(default)s]")
     parser.add_argument("-emin", default=-10.0, type=float,
                         help="minimum energy on real axis "
                         "[default: %(default)d]")
-    parser.add_argument("-emax", default=-1000.0, type=float,
+    parser.add_argument("-emax", default=10.0, type=float,
                         help="maximum energy on real axis ")
     parser.add_argument("-de", default=0.01, type=float,
                         help="energy step on real axis "
@@ -226,30 +230,30 @@ def handle_commandline():
                         help="number of points on real energy axis"
                         "[default: %(default)i]")
     parser.add_argument("-use_moments", action='store_true',
-                        help="Use or not external information about momenta "
+                        help="Use or not external information about momenta"
                         "[default: %(default)s]")
     parser.add_argument("-m", nargs=3, type=float,
-                        help="first momenta of function: m0, m1, m2 ")
+                        help="first momenta of function: m0, m1, m2")
     parser.add_argument("-pm", "--print_moments", action='store_true',
                         help="Print or not estimated values of momenta"
                         "[default: %(default)s]")
     parser.add_argument("-random", action='store_true',
-                        help="Use or not randomly picked points in input set "
+                        help="Use or not randomly picked points in input set"
                         "[default: %(default)s]")
     parser.add_argument("-nrandomcycle", type=int, default=200,
                         help="number cycles with random points"
                         "[default: %(default)i]")
     parser.add_argument("-ls", action='store_true',
-                        help="Use non-diagonal form of Pade coefficients matrix "
+                        help="Use non-diagonal form of Pade coefficients matrix"
                         "[default: %(default)s]")
     parser.add_argument("-npo", nargs=2, default=(10, 120), type=int,
-                        help="number of input iw points "
+                        help="number of input iw points"
                         "[default: %(default)s]")
     parser.add_argument("-use_ne", action='store_true',
-                        help="use symmetry of input function: G(z^*)=G^*(z) "
+                        help="use symmetry of input function: G(z^*)=G^*(z)"
                         "[default: %(default)s]")
     parser.add_argument("-ne", nargs=2, default=(0, 5), type=int,
-                        help="number of negative iw points "
+                        help="number of negative iw points"
                         "[default: %(default)s]")
 
     args = parser.parse_args()
