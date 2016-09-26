@@ -170,11 +170,67 @@ class pade_stuff():
     
     def pade_coef_m(self):
         print('pade_coef_m')
-        pass
+        r = len(self.e) // 2
+        s = mp.zeros(2 * r, 1)
+        x = mp.zeros(2 * r)
+        for i in range(0, 2 * r):
+            s[i] = f[i] * e[i] ** r
+            for j in range(0, r):
+                x[i, j] = e[i] ** j
+            for j in range(r, 2 * r):
+                x[i, j] = -f[i] * e[i] ** (j - r)
+    
+        # Solving the equation: |p|
+        #                       | |=X^{-1}*s
+        #                       |q|
+        # Here we should catch exception in linalg!!
+        try:
+            x = mp.inverse(x)
+        except ZeroDivisionError as err:
+            if 'matrix is numerically singular' in err.message:
+                pq = 123456.7
+                success = False
+            else:
+                raise
+        else:
+            pq = x * s
+            success = True
+        return pq, success
     
     def pade_coef_m_ls(self):
         print('pade_coef_m_ls')
-        pass
+        m = len(e)
+        r = n // 2
+        s = mp.zeros(m, 1)
+        x = mp.zeros(m, n)
+        for i in range(0, m):
+            s[i] = f[i] * e[i] ** r
+            for j in range(0, r):
+                x[i, j] = e[i] ** j
+            for j in range(r, 2 * r):
+                x[i, j] = -f[i] * e[i] ** (j - r)
+        success = True
+        solver = 'LU solver'
+        try:
+            pq = mp.lu_solve(x, s)
+        except (ZeroDivisionError, ValueError):
+            # if 'matrix is numerically singular' in err.message:
+            try:
+                pq = mp.qr_solve(x, s)
+            # success = True
+            except ValueError:
+                # if 'matrix is numerically singular' in err.message:
+                success = False
+                pq = 123456.7
+                # else:
+                #     raise
+            else:
+                pq = pq[0]
+                solver = 'QR solver'
+        if success is True:
+            pq.rows += 1
+            pq[n, 0] = mp.mpc(1, 0)
+        return pq, success, solver
     
     def pade_coef_n(self):
         """
