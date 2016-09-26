@@ -14,8 +14,11 @@ def main():
     start_time = time.time()
     inp = pade_input()
     p = pade_stuff(inp)
-    # results, deltas, solutions = do_pade(p)
+    p.pade()
+    p.p_c()
+    p.make_coef()
     
+    # results, deltas, solutions = do_pade(p)
     
     
 class pade_stuff():
@@ -25,7 +28,18 @@ class pade_stuff():
     from disk and sets type of arrays in acordance with mlib. 
     """
     def __init__(self, inp):
-        sets,  p_c, pade, w, f, e = self.prepare_pade(inp)
+        tmp = self.prepare_pade(inp)
+        self.sets = tmp[0]
+        self.p_c = tmp[1]
+        self.pade = tmp[2]
+        self.w = tmp[3]
+        self.f = tmp[4]
+        self.e = tmp[5]
+
+    def make_coef(self):
+        for s in self.sets:
+            print(len(s), s)
+
 
     def prepare_pade(self, ii):
         sets = []
@@ -48,18 +62,28 @@ class pade_stuff():
         suffix_pade_coef = ''
         if ii.ls:
             suffix_pade_coef += '_ls'
-        if ii.use_moments:
-            suffix1 += '_m'
         if ii.mlib == 'numpy':
             w = np.array(w, dtype = np.complex128)
             f = np.array(f, dtype = np.complex128)
-            pade = pade_n + suffix_pade
-            pade_coef = pade_coef_n + suffix_pade_coef
+            if ii.use_moments:
+                pade = self.pade_n_m
+            else:
+                pade = self.pade_n
+            if ii.ls:
+                pade_coef = self.pade_coef_n_ls
+            else:
+                pade_coef = self.pade_coef_n
         elif ii.mlib == 'mpmath':
             w = fp.matrix(w) 
             f = fp.matrix(f)
-            pade = pade_m + suffix_pade
-            pade_coef = pade_coef_m + suffix_pade_coef
+            if ii.use_moments:
+                pade = self.pade_m_m
+            else:
+                pade = self.pade_m
+            if ii.ls:
+                pade_coef = self.pade_coef_m_ls
+            else:
+                pade_coef = self.pade_coef_m
         else:
             raise('mlib != numpy and mlib != numpy')
         return sets, pade_coef, pade, w, f, e
@@ -72,12 +96,8 @@ class pade_stuff():
         with open(filename, 'r') as f:
             data = f.readlines()
     
-        # Analyze the file.
-    
-        # Number of lines.
         nlines = len(data)
-        print(" Number of lines: %i " % nlines)
-    
+
         # Count pairs of blank lines to determine number of datasets.
         # Each dataset should be ended by 2 blank lines.
         ndatasets = 0
@@ -132,29 +152,98 @@ class pade_stuff():
     def make_e_mesh(self, t, d, n):
         return [t + i * d + 1j * 0.01 for i in range(n)]
 
-    def pade_n():
+    def pade_n(self):
+        print('pade_n')
         pass
     
-    def pade_n_m():
+    def pade_n_m(self):
+        print('pade_n_m')
         pass
     
-    def pade_m():
+    def pade_m(self):
+        print('pade_m')
         pass
     
-    def pade_m_m():
+    def pade_m_m(self):
+        print('pade_m_m')
         pass
     
-    def pade_coef_m():
+    def pade_coef_m(self):
+        print('pade_coef_m')
         pass
     
-    def pade_coef_m_ls():
+    def pade_coef_m_ls(self):
+        print('pade_coef_m_ls')
         pass
     
-    def pade_coef_n():
-        pass
+    def pade_coef_n(self):
+        """
+        Subroutine pade_coeficients() finds coefficient of Pade approximant
+        f - values of complex function for approximation
+        e - complex points in which function f is determined
+        """
+        if debug:
+            print('pade_coef_n')
+        r = len(self.e) // 2
+        s = np.zeros(2 * r, dtype=np.complex128)
+        x = np.zeros((2 * r, 2 * r), dtype=np.complex128)
+        for i in range(0, 2 * r):
+            s[i] = f[i] * e[i] ** r
+            for j in range(0, r):
+                x[i, j] = e[i] ** j
+            for j in range(r, 2 * r):
+                x[i, j] = -f[i] * e[i] ** (j - r)
+        # Solving the equation: |p|
+        #                       | |=X^{-1}*s
+        #                       |q|
+        try:
+            x = np.linalg.inv(x)
+        except np.linalg.linalg.LinAlgError as err:
+            if 'Singular matrix' in err.message:
+                pq = 123456.7
+                success = False
+            else:
+                raise
+        else:
+            pq = np.dot(x, s)
+            success = True
+        return pq, success
 
-    def pade_coef_n_ls():
-        pass
+    def pade_coef_n_ls(self):
+        if debug:
+            print('pade_coef_n_ls')
+        """
+        Subroutine pade_ls_coeficients() finds coefficient of Pade approximant by Least Squares method
+        f - values of complex function for approximation
+        e - complex points in which function z is determined
+        n - number of coefficients, should be less than number of points in e (n<m)
+        """
+        m = len(self.e)
+        r = n // 2
+        s = np.zeros(m, dtype=np.complex128)
+        x = np.zeros((m, n), dtype=np.complex128)
+        for i in range(0, m):
+            s[i] = f[i] * e[i] ** r
+            for j in range(0, r):
+                x[i, j] = e[i] ** j
+            for j in range(r, 2 * r):
+                x[i, j] = -f[i] * e[i] ** (j - r)
+        # Solving the equation: aX=b, where
+        # a=x, b=s,
+        #                       |p|
+        #                   X = | |
+        #                       |q|
+        try:
+            self.pq = np.linalg.lstsq(x, s)[0]
+        except np.linalg.linalg.LinAlgError as err:
+            if 'Singular matrix' in err.message:
+                pq = 123456.7
+                success = False
+            else:
+                raise
+        else:
+            success = True
+        return pq, success
 
 class pade_input():
 
@@ -195,7 +284,10 @@ class pade_input():
                     import numpy as np
                 except ImportError:
                     raise('The are no numpy too, please install something')
+                else:
+                    global np
             else:
+                global mp, im, re, fdiv, mpc, fp, workdps
                 fp.dps = 12
                 mp.prec = self.prec
         if self.mlib == 'mpmath':
@@ -204,6 +296,7 @@ class pade_input():
             except ImportError:
                 raise('Please install mpmath Python module or use numpy as mlib')
             else:
+                global mp, im, re, fdiv, mpc, fp, workdps
                 fp.dps = 12
                 mp.prec = self.prec
         if self.mlib == 'numpy':
@@ -211,6 +304,8 @@ class pade_input():
                 import numpy as np
             except ImportError:
                 raise('Please install numpy Python module or use mpmath as mlib')
+            else:
+                global np
             
             
     def validate_input(self):
