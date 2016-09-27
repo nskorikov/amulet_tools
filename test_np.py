@@ -31,10 +31,15 @@ print(' ')
 
 
 
-mp.prec=12
+mp.prec=128
 pq = mp.qr_solve(a, b)[0]
+
 aa = mp.matrix(a)
-bb = mp.matrix(bb)
+bb = mp.zeros(m, 1)
+for j in range(0, m):
+    for i in range(0, n):
+        bb[j] += aa[j, i] * x[i]
+
 pq1 = mp.qr_solve(a, b)[0]
 for i in range(1, n):
     diff = pq[i]-pq1[i]
