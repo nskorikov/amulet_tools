@@ -41,3 +41,5 @@ for i in range(1, n):
     print('%f %f' % (diff.real, diff.imag), type(diff))
 print( ' ')
 
+a = np.array((m, n), dtype=np.complex256)
+b = np.array()
