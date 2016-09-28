@@ -40,9 +40,11 @@ for j in range(0, m):
     for i in range(0, n):
         bb[j] += aa[j, i] * x[i]
 
-pq1 = mp.qr_solve(aa, bb)[0]
+pq1 = mp.qr_solve(a, b)[0]
 for i in range(1, n):
     diff = pq[i]-pq1[i]
     print('%f %f' % (diff.real, diff.imag), type(diff))
 print( ' ')
 
+a = np.array((m, n), dtype=np.complex256)
+b = np.array()

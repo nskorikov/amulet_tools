@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+# Copyright © 2012-13 Qtrac Ltd. All rights reserved.
+# This program or module is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version. It is provided for
+# educational purposes and is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+
+import argparse
+import collections
+# import math
+import multiprocessing
+# import os
+import sys
+import random
+from mpmath import mp
+
+mp.prec = 256
+Result = collections.namedtuple("Result", "solved")
+Summary = collections.namedtuple("Summary", "todo solved")
+n = 50
+nrun = 10
+
+def main():
+    concurrency = handle_commandline()
+    report("starting...")
+    m1, m2 = generate_matrix(n)
+    summary = solve(m1, m2, concurrency)
+#     summary = scale(size, smooth, source, target, concurrency)
+#     summarize(summary, concurrency)
+
+
+def handle_commandline():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--concurrency", type=int,
+            default=multiprocessing.cpu_count(),
+            help="specify the concurrency (for debugging and "
+                "timing) [default: %(default)d]")
+    args = parser.parse_args()
+    return  args.concurrency
+
+
+
+def generate_matrix(n):
+    a = []
+    x = []
+    random.seed()
+    for i in range(0, n):
+        aa = [random.uniform(1, 10) * 2 *i + random.uniform(1, 10) * 1j for j in range(0,n)]
+        a.append(aa)
+        x.append(random.uniform(1, 10) * 3 * i + random.uniform(1, 10) * 1j)
+    a = mp.matrix(a)
+    x = mp.matrix(x)
+    b = mp.zeros(n, 1)
+    for j in range(0, n):
+        for i in range(0, n):
+            b[j] += a[j, i] * x[i]
+    return a, b
+
+
+def solve(m1, m2, concurrency):
+    canceled = False
+    jobs = multiprocessing.JoinableQueue()
+    results = multiprocessing.Queue()
+    create_processes(jobs, results, concurrency)
+    todo = add_jobs(m1, m2, jobs)
+    try:
+        jobs.join()
+    except KeyboardInterrupt: # May not work on Windows
+        report("canceling...")
+        canceled = True
+    copied = scaled = 0
+    while not results.empty(): # Safe because all jobs have finished
+        result = results.get_nowait()
+        solved += result.copied
+    return Summary(todo, solved, canceled)
+
+
+def create_processes(jobs, results, concurrency):
+    for _ in range(concurrency):
+        process = multiprocessing.Process(target=worker, args=(jobs, results))
+        process.daemon = True
+        process.start()
+
+
+def worker(jobs, results):
+    while True:
+        try:
+            matrix1, matrix2 = jobs.get()
+            try:
+                result = solve_one(matrix1, matrix2)
+#                 report("{} ".format("solved")
+                results.put(result)
+            except Image.Error as err:
+                Qtrac.report(str(err), True)
+        finally:
+            jobs.task_done()
+
+
+def add_jobs(m1, m2, jobs):
+    for todo in range(1, nrun):
+        jobs.put((m1, m2))
+    return todo
+
+
+def solve_one(matrix1, matrix2):
+    pq = mp.qr_solve(a, b)[0]
+    return Result(0, 1)
+
+
+def summarize(summary, concurrency):
+    message = "copied {} scaled {} ".format(summary.copied, summary.scaled)
+    difference = summary.todo - (summary.copied + summary.scaled)
+    if difference:
+        message += "skipped {} ".format(difference)
+    message += "using {} processes".format(concurrency)
+    if summary.canceled:
+        message += " [canceled]"
+    Qtrac.report(message)
+    print()
+
+def report(message="", error=False):
+    if len(message) >= 70 and not error:
+        message = message[:67] + "..."
+    sys.stdout.write("\r{:70}{}".format(message, "\n" if error else ""))
+    sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()
