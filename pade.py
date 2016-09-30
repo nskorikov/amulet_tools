@@ -65,7 +65,7 @@ class pade_stuff():
     def do_pade(self):
         for s in self.sets:
             e1, f1 = self.points(s)
-            pq = self.make_coef(s)
+            pq, success, solver = self.make_coef(s, self.e)
             gr = self.restore_f(pq, e)
             if not analitical(gr):
                 self.sets.remove(s)
