@@ -6,6 +6,8 @@ import time
 import os.path
 import argparse
 import sys
+import random
+from math import ceil, pow
 
 debug = True
 
@@ -20,6 +22,30 @@ def main():
                                 # all non-physical solution are dropped
 
     # results, deltas, solutions = do_pade(p)
+
+
+def analitical(f):
+    analitical = True
+    for ff in f:
+        if ff.imag > 0.0:
+            analitical = False
+            break
+    return analitical
+
+
+def residual(f1, f2):
+    """
+    Return normed difference between two complex functions of equal length
+    \Delta=\sqrt( \Sum( (f1_i-f2_i)^2 ) )/N, where N -- length of functions.
+    """
+    l1 = len(f1)
+    print(type(f1[2]), type(f2[2]), type(f1[4]-f2[4]))
+    if l1 != len(f2):
+        print('WARNING: calc_residual')
+        print('Lengths of f1 and f2 are different!\n')
+    d = pow(sum([pow(complex(f1[i]) - f2[i], 2) for i in range(l1)]), 0.5)
+    d /= l1
+    return float(abs(d))
 
 
 class pade_stuff():
@@ -59,44 +85,51 @@ class pade_stuff():
 
         iw, sigma = self.readsigma(ii.infile)
         emesh = self.make_e_mesh(ii.emin, ii.de, ii.npts)
-        pade, pade_coef, points= self.choose_version()
+        pade, pade_coef, points= self.choose_version(ii)
         return sets, pade_coef, pade, points, iw, sigma, emesh
 
     def do_pade(self):
         for s in self.sets:
-            e1, f1 = self.points(s)
-            pq, success, solver = self.make_coef(s, self.e)
-            gr = self.restore_f(pq, e)
+            iw1, f1 = self.points(s[0], s[1])
+            pq, success, solver = self.make_coef(s, iw1, f1)
+            gr = self.pade(pq, self.e)
             if not analitical(gr):
                 self.sets.remove(s)
+                print('Set', s,'gives not analitical solution\n')
+#                 print(self.sets, '\n')
                 continue
-            gi = self.restore_f(pq, iw)
+            gi = self.pade(pq, self.iw)
             if not analitical(gi):
+                print('Set', s,'gives not analitical solution\n')
                 self.sets.remove(s)
                 continue
             self.sigre.append(gr)
             self.sigim.append(gi)
-            self.delta.append(residual(gi, f))
+            self.delta.append(residual(gi, self.f))
+        print(len(self.sets), len(self.sigre), len(self.sigim))
+        for d in self.delta:
+            print(d)
 
-    def make_coef(self, s, e):
-        m = len(e)
-        r = s[2] // 2
+    def make_coef(self, s, iw1, f1):
+        m = len(iw1)
+        r = (s[0] + s[1] - s[2]) // 2
         a = []
         b = []
         for i in range(0, m):
-            b.append(f[i] * e[i] ** r)
+            b.append(f1[i] * iw1[i] ** r)
             aa = []
             for j in range(0, r):
-                aa.append(e[i] ** j)
-            a.append(aa)
-            aa = []
+                aa.append(iw1[i] ** j)
+#             a.append(aa)
+#             aa = []
             for j in range(r, 2 * r):
-                aa.append(-f[i] * e[i] ** (j - r))
+                aa.append(-f1[i] * iw1[i] ** (j - r))
             a.append(aa)
                 
-        pq, success, used_solver = self.p_c(f1, e1, ipo + ine - q1, a, b)
+        return self.p_c(a, b)
+#         pq, success, used_solver = self.p_c(a, b)
 
-    def choose_version(self):
+    def choose_version(self, ii):
         if ii.mlib == 'numpy':
             if ii.use_moments:
                 pade = self.pade_n_m
@@ -120,7 +153,7 @@ class pade_stuff():
         if ii.random:
             points = self.choose_prandom_points
         else:
-            points = self.choose_points
+            points = self.choose_seq_points
         return pade, pade_coef, points
 
     def readsigma(self, filename):
@@ -189,41 +222,58 @@ class pade_stuff():
     def make_e_mesh(self, t, d, n):
         return [t + i * d + 1j * 0.01 for i in range(n)]
 
-    def pade_n(self):
-        print('pade_n')
-        pass
+    def pade_n(self, coef, e):
+        """
+        Calculation of analitical function on a arbitrary mesh for a given
+         Pade coefficient.
+        """
+        if debug: 
+            print('pade_n')
+        nlines = len(e)
+        r = len(coef) // 2
+        f = np.zeros(nlines, dtype=np.complex128)
+        pq = np.ones(r * 2 + 1, dtype=np.complex128)
+        for i in range(0, r):
+            pq[i] = coef[i]
+            pq[i + r] = coef[i + r]
+        for iw in range(0, nlines):
+            p = np.complex128(0.0)
+            q = np.complex128(0.0)
+            for i in range(0, r):
+                p += pq[i] * e[iw] ** i
+            for i in range(0, r + 1):
+                q += pq[i + r] * e[iw] ** i
+            f[iw] = np.divide(p, q)
+        return f
 
     def pade_n_m(self):
-        print('pade_n_m')
+        if debug: 
+            print('pade_n_m')
         pass
 
     def pade_m(self):
-        print('pade_m')
+        if debug:
+            print('pade_m')
         pass
 
     def pade_m_m(self):
-        print('pade_m_m')
+        if debug:
+            print('pade_m_m')
         pass
 
-    def pade_coef_m(self):
+    def pade_coef_m(self, a, b):
+        """
+        Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
+         solving equation aX=b. The general mpmath.inverse() routine used
+         for inversion of matrix 'a'. In this version, number of 
+         coefficients is equal to number of complex points where the function
+         is defined 
+        """
         if debug:
             print('pade_coef_m')
-        r = len(self.e) // 2
-        s = mp.zeros(2 * r, 1)
-        x = mp.zeros(2 * r)
-        for i in range(0, 2 * r):
-            s[i] = f[i] * e[i] ** r
-            for j in range(0, r):
-                x[i, j] = e[i] ** j
-            for j in range(r, 2 * r):
-                x[i, j] = -f[i] * e[i] ** (j - r)
-
-        # Solving the equation: |p|
-        #                       | |=X^{-1}*s
-        #                       |q|
-        # Here we should catch exception in linalg!!
+        solver = 'Mpmath inverse'
         try:
-            x = mp.inverse(x)
+            a = mp.inverse(a)
         except ZeroDivisionError as err:
             if 'matrix is numerically singular' in err.message:
                 pq = 123456.7
@@ -231,117 +281,98 @@ class pade_stuff():
             else:
                 raise
         else:
-            pq = x * s
+            x = a * b
             success = True
-        return pq, success
+        return x, success, solver
 
-    def pade_coef_m_ls(self):
+    def pade_coef_m_ls(self, a, b):
+        """
+        Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
+         solving equation aX=b. The Least Squares method using 
+         mpmath.lu_solve() or mpmath.qr_solve() is utilized. In this version,
+         number of coefficients is less then number of complex points where
+         the function is defined 
+        """
         if debug:
             print('pade_coef_m_ls')
-        m = len(e)
-        r = n // 2
-        s = mp.zeros(m, 1)
-        x = mp.zeros(m, n)
-        for i in range(0, m):
-            s[i] = f[i] * e[i] ** r
-            for j in range(0, r):
-                x[i, j] = e[i] ** j
-            for j in range(r, 2 * r):
-                x[i, j] = -f[i] * e[i] ** (j - r)
         success = True
-        solver = 'LU solver'
+        solver = 'Mpmath LU solver'
         try:
-            pq = mp.lu_solve(x, s)
+            x = mp.lu_solve(a, b)
         except (ZeroDivisionError, ValueError):
             # if 'matrix is numerically singular' in err.message:
             try:
-                pq = mp.qr_solve(x, s)
+                x = mp.qr_solve(a, b)
             # success = True
             except ValueError:
                 # if 'matrix is numerically singular' in err.message:
                 success = False
-                pq = 123456.7
+                x = 123456.7
                 # else:
                 #     raise
             else:
-                pq = pq[0]
-                solver = 'QR solver'
+                x = x[0]
+                solver = 'Mpmath QR solver'
         if success is True:
-            pq.rows += 1
-            pq[n, 0] = mp.mpc(1, 0)
-        return pq, success, solver
+            x.rows += 1
+            x[n, 0] = mp.mpc(1, 0)
+        return x, success, solver
 
-    def pade_coef_n(self):
+    def pade_coef_n(self, a, b):
         """
-        Subroutine pade_coeficients() finds coefficient of Pade approximant
-        f - values of complex function for approximation
-        e - complex points in which function f is determined
+        Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
+         solving equation aX=b. The general numpy.linalg.inv() routine used
+         for inversion of matrix 'a'. In this version, number of 
+         coefficients is equal to number of complex points where the function
+         is defined 
         """
         if debug:
             print('pade_coef_n')
-        r = len(self.e) // 2
-        s = np.zeros(2 * r, dtype=np.complex128)
-        x = np.zeros((2 * r, 2 * r), dtype=np.complex128)
-        for i in range(0, 2 * r):
-            s[i] = f[i] * e[i] ** r
-            for j in range(0, r):
-                x[i, j] = e[i] ** j
-            for j in range(r, 2 * r):
-                x[i, j] = -f[i] * e[i] ** (j - r)
-        # Solving the equation: |p|
-        #                       | |=X^{-1}*s
+        # Solving the equation: aX=b, where
+        #                       |p|
+        #                   X = | |
         #                       |q|
+        solver = 'Numpy linalg.inv'
         try:
-            x = np.linalg.inv(x)
+            a = np.linalg.inv(a)
         except np.linalg.linalg.LinAlgError as err:
             if 'Singular matrix' in err.message:
-                pq = 123456.7
+                x = 123456.7
                 success = False
             else:
                 raise
         else:
-            pq = np.dot(x, s)
+            x = np.dot(a, b)
             success = True
-        return pq, success
+        return x, success, solver
 
-    def pade_coef_n_ls(self):
-        if debug:
-            print('pade_coef_n_ls')
+    def pade_coef_n_ls(self, a, b):
         """
         Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
-        by Least Squares method
-        f - values of complex function for approximation
-        e - complex points in which function z is determined
-        n - number of coefficients, should be less than number of
-        points in e (n<m)
+         solving equation aX=b. The Least Squares method using 
+         numpy.linalg.lstsq is utilized. In this version, number of 
+         coefficients is less then number of complex points where the function
+         is defined 
         """
-        m = len(self.e)
-        r = n // 2
-        b = np.zeros(m, dtype=np.complex128)
-        a = np.zeros((m, n), dtype=np.complex128)
-        for i in range(0, m):
-            b[i] = f[i] * e[i] ** r
-            for j in range(0, r):
-                a[i, j] = e[i] ** j
-            for j in range(r, 2 * r):
-                a[i, j] = -f[i] * e[i] ** (j - r)
+        if debug:
+            print('pade_coef_n_ls')
         # Solving the equation: aX=b, where
         #                       |p|
         #                   X = | |
         #                       |q|
         try:
-            self.pq = np.linalg.lstsq(a, b)[0]
+            x = np.linalg.lstsq(a, b)[0]
         except np.linalg.linalg.LinAlgError as err:
             if 'Singular matrix' in err.message:
-                pq = 123456.7
+                x = 123456.7
                 success = False
             else:
                 raise
         else:
             success = True
-        return pq, success
+        return x, success
 
-    def choose_prandom_points(e, f, nneg, npos):
+    def choose_prandom_points(self, npos, nneg):
         """
         Subroutine selects from input nneg+npos points: first nneg+npos-nrnd
         points are selected sequently, then nrnd points are picked randomly.
@@ -350,6 +381,8 @@ class pade_stuff():
         e -- input complex array with energy points
         f -- input complex array with values of function in points e[i]
         """
+        e = self.iw
+        f = self.f 
         if (nneg + npos) % 2 != 0:
             print('Number of chosen points should be even!',
                   nneg, npos, nneg + npos)
@@ -373,15 +406,18 @@ class pade_stuff():
             if pp[i] == pp[i + 1]:
                 pp[i + 1] += 1
         # The last two points should be sequential to fix tail of F(z).
-        pp[nrnd - 1] = pp[nrnd - 2] + 1
+        if nrnd != 0:
+            pp[nrnd - 1] = pp[nrnd - 2] + 1
         # Append selected points
         for i in range(0, nrnd):
             ee.append(e[pp[i]])
             ff.append(f[pp[i]])
         return ee, ff
 
-    def choose_seq_points(e, f, nneg, npos, n):
+    def choose_seq_points(self, npos, nneg):
         # Pick first nneg+npos points
+        e = self.iw
+        f = self.f 
         if (nneg + npos) % 2 != 0:
             print('Number of chosen points should be even!', nneg, npos, nneg + npos)
             npos += 1
@@ -441,23 +477,22 @@ class pade_input():
                 fp.dps = 12
                 mp.prec = self.prec
         if self.mlib == 'mpmath':
+            global mp, im, re, fdiv, mpc, fp, workdps
             try:
                 from mpmath import mp, im, re, fdiv, mpc, fp, workdps
             except ImportError:
                 raise('Please install mpmath Python module or use '
                       'numpy as mlib')
             else:
-                global mp, im, re, fdiv, mpc, fp, workdps
                 fp.dps = 12
                 mp.prec = self.prec
         if self.mlib == 'numpy':
+            global np
             try:
                 import numpy as np
             except ImportError:
                 raise('Please install numpy Python module or use '
                       'mpmath as mlib')
-            else:
-                global np
 
     def validate_input(self):
         if not self.random:
