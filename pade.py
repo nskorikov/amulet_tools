@@ -7,7 +7,7 @@ import os.path
 import argparse
 import sys
 import random
-from math import ceil, pow
+from math import ceil
 
 debug = True
 
@@ -39,13 +39,12 @@ def residual(f1, f2):
     \Delta=\sqrt( \Sum( (f1_i-f2_i)^2 ) )/N, where N -- length of functions.
     """
     l1 = len(f1)
-    print(type(f1[2]), type(f2[2]), type(f1[4]-f2[4]))
     if l1 != len(f2):
         print('WARNING: calc_residual')
         print('Lengths of f1 and f2 are different!\n')
-    d = pow(sum([pow(complex(f1[i]) - f2[i], 2) for i in range(l1)]), 0.5)
+    d = sum([abs(f1[i] - f2[i]) for i in range(l1)])
     d /= l1
-    return float(abs(d))
+    return d
 
 
 class pade_stuff():
@@ -94,14 +93,18 @@ class pade_stuff():
             pq, success, solver = self.make_coef(s, iw1, f1)
             gr = self.pade(pq, self.e)
             if not analitical(gr):
+                print(len(self.sets))
                 self.sets.remove(s)
+                print(len(self.sets))
                 print('Set', s,'gives not analitical solution\n')
 #                 print(self.sets, '\n')
                 continue
             gi = self.pade(pq, self.iw)
             if not analitical(gi):
                 print('Set', s,'gives not analitical solution\n')
+                print(len(self.sets))
                 self.sets.remove(s)
+                print(len(self.sets))
                 continue
             self.sigre.append(gr)
             self.sigim.append(gi)
@@ -244,7 +247,7 @@ class pade_stuff():
             for i in range(0, r + 1):
                 q += pq[i + r] * e[iw] ** i
             f[iw] = np.divide(p, q)
-        return f
+        return f.tolist()
 
     def pade_n_m(self):
         if debug: 
