@@ -249,20 +249,86 @@ class pade_stuff():
             f[iw] = np.divide(p, q)
         return f.tolist()
 
-    def pade_n_m(self):
+    def pade_n_m(self,coef,e,m):
+        """
+        Calculation of analitical function on a arbitrary mesh for a given 
+        Pade coefficient and first known momenta of function
+        e -  energy mesh (can be complex or real)
+        coef - Pade coefficients
+        m - first three momenta of function
+        """
         if debug: 
             print('pade_n_m')
-        pass
+        nlines = len(e)
+        r = len(coef) // 2
+        f = np.zeros(nlines, dtype=np.complex128)
+        pq = np.ones(r * 2 + 1, dtype=np.complex128)
+        for i in range(0, r):
+            pq[i] = coef[i]
+            pq[i + r] = coef[i + r]
+        for iw in range(0, nlines):
+            p = np.complex128(0.0)
+            q = np.complex128(0.0)
+            for i in range(0, r):
+                p += pq[i] * e[iw] ** i
+            for i in range(0, r + 1):
+                q += pq[i + r] * e[iw] ** i
+    
+            f[iw] = np.divide(p, q)
+            f[iw] /= e[iw] ** 3
+            f[iw] += m[0]/e[iw] + m[1]/(e[iw]**2) + m[2]/(e[iw]**3)
+        return f.tolist()
 
-    def pade_m(self):
+
+    def pade_m(self, coef, e):
+        """
+         Calculation of analitical function on a arbitrary mesh for a given 
+         Pade coefficient. e - energy mesh (can be complex or real)
+         coef - Pade coefficients
+        """
         if debug:
             print('pade_m')
-        pass
+    
+        nlines = len(e)
+        r = len(coef) / 2
+        f = mp.zeros(nlines, 1)
+        for iw in range(0, nlines):
+            p = mp.mpc(0.0)
+            q = mp.mpc(0.0)
+            for i in range(0, r):
+                p += coef[i] * e[iw] ** i
+            for i in range(0, r + 1):
+                q += coef[i + r] * e[iw] ** i
+            f[iw] = fdiv(p, q)
+        f = fp.matrix(f)
+        return f.tolist()
 
-    def pade_m_m(self):
+    def pade_m_m(self,coef,e,m):
+        """
+         Calculation of analitical function on a arbitrary mesh for a given 
+         Pade coefficient and first known momenta of function
+         e -  energy mesh (can be complex or real)
+         coef - Pade coefficients
+         m - first three momenta of function
+        """
         if debug:
             print('pade_m_m')
-        pass
+        nlines = len(e)
+        r = len(coef) // 2
+        f = mp.zeros(nlines, 1)
+        pq = mp.ones(r * 2 + 1, 1)
+        for iw in range(0, nlines):
+            p = mp.mpc(0.0)
+            q = mp.mpc(0.0)
+            for i in range(0, r):
+                p += coef[i] * e[iw] ** i
+            for i in range(0, r + 1):
+                q += coef[i + r] * e[iw] ** i
+            f[iw] = fdiv(p, q)
+            f[iw] /= e[iw] ** 3
+            f[iw] += m[0] / e[iw] + m[1] / (e[iw] ** 2) + m[2] / (e[iw] ** 3)
+        f = fp.matrix(f)
+        return f.tolist()
 
     def pade_coef_m(self, a, b):
         """
@@ -303,16 +369,11 @@ class pade_stuff():
         try:
             x = mp.lu_solve(a, b)
         except (ZeroDivisionError, ValueError):
-            # if 'matrix is numerically singular' in err.message:
             try:
                 x = mp.qr_solve(a, b)
-            # success = True
             except ValueError:
-                # if 'matrix is numerically singular' in err.message:
                 success = False
                 x = 123456.7
-                # else:
-                #     raise
             else:
                 x = x[0]
                 solver = 'Mpmath QR solver'
@@ -422,7 +483,8 @@ class pade_stuff():
         e = self.iw
         f = self.f 
         if (nneg + npos) % 2 != 0:
-            print('Number of chosen points should be even!', nneg, npos, nneg + npos)
+            print('Number of chosen points should be even!', 
+                  nneg, npos, nneg + npos)
             npos += 1
         ee = []
         ff = []
