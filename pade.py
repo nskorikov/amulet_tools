@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 # Program make analitical continuation of complex function defined on Matsubara
-# frequency to real energy using Pade approximant. Universal version.
+# frequency to real energy using Pade approximant.
 import time
 import os.path
 import argparse
@@ -9,19 +9,26 @@ import sys
 import random
 from math import ceil
 
-debug = True
+debug = False
 
 
 def main():
     print('Start at %s ' % time.ctime())
     start_time = time.time()
+
     inp = pade_input()          # parsing of command line
     p = pade_stuff(inp)         # reading of sigma, preparation of sets,
                                 # selection of version keep it all in p
-    p.do_pade()                 # calc huge array of pade coefficient for sets
-                                # all non-physical solution are dropped
+    p.do_pade()
 
-    # results, deltas, solutions = do_pade(p)
+    end_time = time.time()
+    print('Stop at %s ' % time.ctime())
+    run_time = end_time - start_time
+    hour = (run_time // 60) // 60
+    minute = run_time // 60 - hour * 60
+    sec = run_time % 60
+    print('Program runtime = %i:%i:%i' % (hour, minute, sec))
+
 
 
 def analitical(f):
@@ -40,11 +47,24 @@ def residual(f1, f2):
     """
     l1 = len(f1)
     if l1 != len(f2):
-        print('WARNING: calc_residual')
-        print('Lengths of f1 and f2 are different!\n')
+        raise('calc_residual: Lengths of f1 and f2 are different!\n')
     d = sum([abs(f1[i] - f2[i]) for i in range(l1)])
     d /= l1
     return d
+
+def write_g_im(filename, e, sigma):
+    nlines = len(e)
+    with open(filename, 'w') as f:
+        for ene, s in zip(e, sigma):
+            f.write('{1:18.12f}{2:18.12f}{3:18.12}\n'.
+            format(ene.imag, s.real, s.imag))
+
+
+def write_g_re(filename, e, sigma):
+    with open(filename, 'w') as f:
+        for ene, s in zip(e, sigma):
+            f.write('{0:18.8f}{1:18.12f}{2:18.12f}\n'.
+            format(ene.real, s.real, s.imag))
 
 
 class pade_stuff():
@@ -57,7 +77,7 @@ class pade_stuff():
     def __init__(self, inp):
         self.m = inp.m
         tmp = self.prepare_pade(inp)
-        self.sets = tmp[0]
+        self.initialsets = tmp[0]
         self.p_c = tmp[1]
         self.pade = tmp[2]
         self.points = tmp[3]
@@ -67,8 +87,12 @@ class pade_stuff():
         self.sigre = []
         self.sigim = []
         self.delta = []
+        self.sets = []
 
     def prepare_pade(self, ii):
+        """
+        Perform some preparational steps before constructing of Pade approximant
+        """
         sets = []
         for ipo in range(ii.npo[0], ii.npo[1], 1):
             for ine in range(ii.ne[0], ii.ne[1]):
@@ -79,10 +103,9 @@ class pade_stuff():
                 else:
                     nls = 1
                 for ils in range(0, nls, 2):
-                    for irand in range(0, ii.nrandomcycle):
+                    for irand in range(0, ii.nrand):
                         set = [ipo, ine, ils, irand]
                         sets.append(set)
-
         iw, sigma = self.readsigma(ii.infile)
         if ii.use_moments:
             self.make_f_prime(iw,sigma)
@@ -91,30 +114,44 @@ class pade_stuff():
         return sets, pade_coef, pade, points, iw, sigma, emesh
 
     def do_pade(self):
-        for s in self.sets:
+        for s in self.initialsets:
             iw1, f1 = self.points(s[0], s[1])
             pq, success, solver = self.make_coef(s, iw1, f1)
             gr = self.pade(pq, self.e)
             if not analitical(gr):
-                print(len(self.sets))
-                self.sets.remove(s)
-                print(len(self.sets))
-                print('Set', s,'gives not analitical solution\n')
-#                 print(self.sets, '\n')
+                # if debug:
+                #     print('Set', s,'gives not analitical solution for gr\n')
                 continue
             gi = self.pade(pq, self.iw)
             if not analitical(gi):
-                print('Set', s,'gives not analitical solution\n')
-                print(len(self.sets))
-                self.sets.remove(s)
-                print(len(self.sets))
+                # if debug:
+                #     print('Set', s,'gives not analitical solution for gi\n')
                 continue
+            self.sets.append(s)
             self.sigre.append(gr)
             self.sigim.append(gi)
             self.delta.append(residual(gi, self.f))
         print(len(self.sets), len(self.sigre), len(self.sigim))
-        for d in self.delta:
-            print(d)
+        if debug:
+            for d in self.delta:
+                print(d)
+        self.analise()
+
+    def analise(self):
+        wgts = [1/d for d in self.delta]
+        wsum = sum(wgts)
+        wgts = [w/wsum for w in wgts]
+        result_sigre=[0.0 for ee in self.e]
+        for j in range(len(wgts)):
+            for i in range(len(self.e)):
+                result_sigre[i] += self.sigre[j][i] * wgts[j]
+        write_g_re('sigre.dat',self.e, result_sigre)
+        result_sigim=[complex(0.0) for iw in self.iw]
+        for j in range(len(wgts)):
+            for i in range(len(self.iw)):
+                result_sigim[i] += self.sigim[j][i] * wgts[j]
+        write_g_im('sigim.dat',self.iw, result_sigim)
+        write_results()
 
     def make_coef(self, s, iw1, f1):
         m = len(iw1)
@@ -126,8 +163,6 @@ class pade_stuff():
             aa = []
             for j in range(0, r):
                 aa.append(iw1[i] ** j)
-#             a.append(aa)
-#             aa = []
             for j in range(r, 2 * r):
                 aa.append(-f1[i] * iw1[i] ** (j - r))
             a.append(aa)
@@ -155,7 +190,7 @@ class pade_stuff():
             else:
                 pade_coef = self.pade_coef_m
         else:
-            raise('mlib != numpy and mlib != numpy')
+            raise('mlib != numpy and mlib != mpmath')
         if ii.random:
             points = self.choose_prandom_points
         else:
@@ -300,7 +335,7 @@ class pade_stuff():
             print('pade_m')
 
         nlines = len(e)
-        r = len(coef) / 2
+        r = len(coef) // 2
         f = mp.zeros(nlines, 1)
         for iw in range(0, nlines):
             p = mp.mpc(0.0)
@@ -310,8 +345,8 @@ class pade_stuff():
             for i in range(0, r + 1):
                 q += coef[i + r] * e[iw] ** i
             f[iw] = fdiv(p, q)
-        f = fp.matrix(f)
-        return f.tolist()
+        # f = fp.matrix(f)
+        return [complex(ff) for ff in f]
 
     def pade_m_m(self,coef,e):
         """
@@ -338,8 +373,8 @@ class pade_stuff():
             f[iw] = fdiv(p, q)
             f[iw] /= e[iw] ** 3
             f[iw] += m[0] / e[iw] + m[1] / (e[iw] ** 2) + m[2] / (e[iw] ** 3)
-        f = fp.matrix(f)
-        return f.tolist()
+        # f = fp.matrix(f)
+        return [complex(ff) for ff in f]
 
     def pade_coef_m(self, a, b):
         """
@@ -435,6 +470,7 @@ class pade_stuff():
         #                       |p|
         #                   X = | |
         #                       |q|
+        solver = 'np.linalg.lstsq'
         try:
             x = np.linalg.lstsq(a, b)[0]
         except np.linalg.linalg.LinAlgError as err:
@@ -445,7 +481,7 @@ class pade_stuff():
                 raise
         else:
             success = True
-        return x, success
+        return x, success, solver
 
     def choose_prandom_points(self, npos, nneg):
         """
@@ -518,7 +554,7 @@ class pade_input():
         self.npts = commandline['npts']
         self.use_moments = commandline['use_moments']
         self.random = commandline['random']
-        self.nrandomcycle = commandline['nrandomcycle']
+        self.nrand = commandline['nrand']
         self.ls = commandline['ls']
         self.npo = commandline['npo']
         self.use_ne = commandline['use_ne']
@@ -572,10 +608,10 @@ class pade_input():
 
     def validate_input(self):
         if not self.random:
-            self.nrandomcycle = 1
-        if self.random and self.nrandomcycle == 1:
+            self.nrand = 1
+        if self.random and self.nrand == 1:
             print('You set switch "-random"')
-            raise ValueError('In such case you should set "-nrandomcycle">1')
+            raise ValueError('In such case you should set "-nrand">1')
         if not self.use_ne:
             self.ne = (0, 1)
         if not os.path.exists(self.infile):
@@ -624,7 +660,7 @@ class pade_input():
               ' with step %4.3f' % (self.emin, self.emax, self.de))
         print('Function from %s will be continued to real axis' % self.infile)
         print('Log of execution will be duplicated to %s' % self.logfile)
-        print('For mathematical tasks we will use "%s"' % self.mlib)
+        print('For mathematical tasks "%s" will be used' % self.mlib)
         if debug:
             ss = sys.modules
             if 'numpy' in ss:
@@ -668,7 +704,7 @@ class pade_input():
         parser.add_argument('-random', action='store_true',
                             help='Use or not randomly picked points in input '
                             'set [default: %(default)s]')
-        parser.add_argument('-nrandomcycle', type=int, default=200,
+        parser.add_argument('-nrand', type=int, default=200,
                             help='number cycles with random points'
                             '[default: %(default)i]')
         parser.add_argument('-ls', action='store_true',
@@ -707,7 +743,7 @@ class pade_input():
                      'npo': args.npo,
                      'use_ne': args.use_ne,
                      'ne': args.ne,
-                     'nrandomcycle': args.nrandomcycle,
+                     'nrand': args.nrand,
                      'logfile': args.logfile,
                      'mlib': args.mlib,
                      'prec': args.precision
