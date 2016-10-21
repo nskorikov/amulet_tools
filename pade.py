@@ -84,6 +84,8 @@ class pade_stuff():
                         sets.append(set)
 
         iw, sigma = self.readsigma(ii.infile)
+        if ii.use_moments:
+            self.make_f_prime(ii)
         emesh = self.make_e_mesh(ii.emin, ii.de, ii.npts)
         pade, pade_coef, points= self.choose_version(ii)
         return sets, pade_coef, pade, points, iw, sigma, emesh
@@ -156,6 +158,18 @@ class pade_stuff():
             points = self.choose_seq_points
         return pade, pade_coef, points
 
+    def make_f_prime(self, ii):
+        # F'(z) = z^3 * [F(z) - p_n/z - p'_n/z^2 - p''_n/z^3]
+        r = len(self.iw)
+        m = ii.m
+        e=self.iw
+        f=self.sigma
+#         fn = fp.zeros(r, 1)
+#         for i in range(0, r):
+#             fn[i] = (e[i] ** 3) * (f[i] - m[0] / e[i] - m[1] / (e[i] ** 2) - m[2] / (e[i] ** 3))
+        self.sigma = [([i] ** 3) * (f[i] - m[0] / e[i] - m[1] / (e[i] ** 2) - m[2] / (e[i] ** 3)) for i in range(0,r)]
+    
+    
     def readsigma(self, filename):
         """
         Read sigma in format of AMULET.
@@ -315,7 +329,7 @@ class pade_stuff():
                 solver = 'Mpmath QR solver'
         if success is True:
             x.rows += 1
-            x[n, 0] = mp.mpc(1, 0)
+            x[-1, 0] = mp.mpc(1, 0)
         return x, success, solver
 
     def pade_coef_n(self, a, b):
@@ -509,7 +523,8 @@ class pade_input():
         if (self.emax - self.emin) / self.npts != self.de:
             print('Check parameters of real energy')
             print('Continuation will be performed to interval'
-                  '[%5.2f,%5.2f] with step %4.3f' % (emin, emax, de))
+                  '[%5.2f,%5.2f] with step %4.3f' % 
+                  (self.emin, self.emax, self.de))
             self.npts = (self.emax - self.emin) // self.de
         if self.use_moments and self.m == (0.0, 0.0, 0.0):
             print('You set switch "-use_moments"')
@@ -539,7 +554,7 @@ class pade_input():
                   ' points')
         if self.use_moments:
             print('Momenta of function will be accounted in continuation: '
-                  '%5.2f %5.2f %5.2f' % self.m)
+                  '%5.2f %5.2f %5.2f' % (self.m[0], self.m[1], self.m[2]))
         if self.ls:
             print('Coefficients of Pade polinom will be finded by Least'
                   ' Squares method')
