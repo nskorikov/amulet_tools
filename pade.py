@@ -36,12 +36,11 @@ def analitical(f):
 def residual(f1, f2):
     """
     Return normed difference between two complex functions of equal length
-    \Delta=\sqrt( \Sum( (f1_i-f2_i)^2 ) )/N, where N -- length of functions.
+    \Delta=\Sum(\sqrt(Re(f1_i-f2_i)^2+Im(f1_i-f2_i)^2))/N - length of functions.
     """
     l1 = len(f1)
     if l1 != len(f2):
-        print('WARNING: calc_residual')
-        print('Lengths of f1 and f2 are different!\n')
+        raise('WARNING: calc_residual: Lengths of f1 and f2 are different!\n')
     d = sum([abs(f1[i] - f2[i]) for i in range(l1)])
     d /= l1
     return d
@@ -93,6 +92,7 @@ class pade_stuff():
     def do_pade(self):
         for s in self.sets:
             iw1, f1 = self.points(s[0], s[1])
+            for ispin in range(nspin)
             pq, success, solver = self.make_coef(s, iw1, f1)
             gr = self.pade(pq, self.e)
             if not analitical(gr):
