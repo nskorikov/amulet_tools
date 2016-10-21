@@ -55,6 +55,7 @@ class pade_stuff():
     """
 
     def __init__(self, inp):
+        self.m = inp.m
         tmp = self.prepare_pade(inp)
         self.sets = tmp[0]
         self.p_c = tmp[1]
@@ -84,7 +85,7 @@ class pade_stuff():
 
         iw, sigma = self.readsigma(ii.infile)
         if ii.use_moments:
-            self.make_f_prime(ii)
+            self.make_f_prime(iw,sigma)
         emesh = self.make_e_mesh(ii.emin, ii.de, ii.npts)
         pade, pade_coef, points= self.choose_version(ii)
         return sets, pade_coef, pade, points, iw, sigma, emesh
@@ -130,7 +131,7 @@ class pade_stuff():
             for j in range(r, 2 * r):
                 aa.append(-f1[i] * iw1[i] ** (j - r))
             a.append(aa)
-                
+
         return self.p_c(a, b)
 #         pq, success, used_solver = self.p_c(a, b)
 
@@ -161,18 +162,12 @@ class pade_stuff():
             points = self.choose_seq_points
         return pade, pade_coef, points
 
-    def make_f_prime(self, ii):
+    def make_f_prime(self, e, f):
         # F'(z) = z^3 * [F(z) - p_n/z - p'_n/z^2 - p''_n/z^3]
-        r = len(self.iw)
-        m = ii.m
-        e=self.iw
-        f=self.sigma
-#         fn = fp.zeros(r, 1)
-#         for i in range(0, r):
-#             fn[i] = (e[i] ** 3) * (f[i] - m[0] / e[i] - m[1] / (e[i] ** 2) - m[2] / (e[i] ** 3))
-        self.sigma = [([i] ** 3) * (f[i] - m[0] / e[i] - m[1] / (e[i] ** 2) - m[2] / (e[i] ** 3)) for i in range(0,r)]
-    
-    
+        m = self.m
+        return [(e[i] ** 3) * (f[i] - m[0] / e[i] - m[1] / (e[i] ** 2) -
+                              m[2] / (e[i] ** 3)) for i in range(0,len(e))]
+
     def readsigma(self, filename):
         """
         Read sigma in format of AMULET.
@@ -206,7 +201,7 @@ class pade_stuff():
         print(" Number of lines per block: %i " % nlinesperblock)
 
         # Take the last dataset from data file
-        data = data[nlinesperblock * (ndatasets - 1): 
+        data = data[nlinesperblock * (ndatasets - 1):
                     (nlinesperblock * ndatasets) - blank_lines_ending]
         nlines = len(data)
         s = data[0].split()
@@ -244,7 +239,7 @@ class pade_stuff():
         Calculation of analitical function on a arbitrary mesh for a given
          Pade coefficient.
         """
-        if debug: 
+        if debug:
             print('pade_n')
         nlines = len(e)
         r = len(coef) // 2
@@ -263,20 +258,21 @@ class pade_stuff():
             f[iw] = np.divide(p, q)
         return f.tolist()
 
-    def pade_n_m(self,coef,e,m):
+    def pade_n_m(self,coef,e):
         """
-        Calculation of analitical function on a arbitrary mesh for a given 
+        Calculation of analitical function on a arbitrary mesh for a given
         Pade coefficient and first known momenta of function
         e -  energy mesh (can be complex or real)
         coef - Pade coefficients
         m - first three momenta of function
         """
-        if debug: 
+        if debug:
             print('pade_n_m')
         nlines = len(e)
         r = len(coef) // 2
         f = np.zeros(nlines, dtype=np.complex128)
         pq = np.ones(r * 2 + 1, dtype=np.complex128)
+        m = self.m
         for i in range(0, r):
             pq[i] = coef[i]
             pq[i + r] = coef[i + r]
@@ -287,7 +283,7 @@ class pade_stuff():
                 p += pq[i] * e[iw] ** i
             for i in range(0, r + 1):
                 q += pq[i + r] * e[iw] ** i
-    
+
             f[iw] = np.divide(p, q)
             f[iw] /= e[iw] ** 3
             f[iw] += m[0]/e[iw] + m[1]/(e[iw]**2) + m[2]/(e[iw]**3)
@@ -296,13 +292,13 @@ class pade_stuff():
 
     def pade_m(self, coef, e):
         """
-         Calculation of analitical function on a arbitrary mesh for a given 
+         Calculation of analitical function on a arbitrary mesh for a given
          Pade coefficient. e - energy mesh (can be complex or real)
          coef - Pade coefficients
         """
         if debug:
             print('pade_m')
-    
+
         nlines = len(e)
         r = len(coef) / 2
         f = mp.zeros(nlines, 1)
@@ -317,9 +313,9 @@ class pade_stuff():
         f = fp.matrix(f)
         return f.tolist()
 
-    def pade_m_m(self,coef,e,m):
+    def pade_m_m(self,coef,e):
         """
-         Calculation of analitical function on a arbitrary mesh for a given 
+         Calculation of analitical function on a arbitrary mesh for a given
          Pade coefficient and first known momenta of function
          e -  energy mesh (can be complex or real)
          coef - Pade coefficients
@@ -331,6 +327,7 @@ class pade_stuff():
         r = len(coef) // 2
         f = mp.zeros(nlines, 1)
         pq = mp.ones(r * 2 + 1, 1)
+        m = self.m
         for iw in range(0, nlines):
             p = mp.mpc(0.0)
             q = mp.mpc(0.0)
@@ -348,9 +345,9 @@ class pade_stuff():
         """
         Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
          solving equation aX=b. The general mpmath.inverse() routine used
-         for inversion of matrix 'a'. In this version, number of 
+         for inversion of matrix 'a'. In this version, number of
          coefficients is equal to number of complex points where the function
-         is defined 
+         is defined
         """
         if debug:
             print('pade_coef_m')
@@ -371,10 +368,10 @@ class pade_stuff():
     def pade_coef_m_ls(self, a, b):
         """
         Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
-         solving equation aX=b. The Least Squares method using 
+         solving equation aX=b. The Least Squares method using
          mpmath.lu_solve() or mpmath.qr_solve() is utilized. In this version,
          number of coefficients is less then number of complex points where
-         the function is defined 
+         the function is defined
         """
         if debug:
             print('pade_coef_m_ls')
@@ -400,9 +397,9 @@ class pade_stuff():
         """
         Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
          solving equation aX=b. The general numpy.linalg.inv() routine used
-         for inversion of matrix 'a'. In this version, number of 
+         for inversion of matrix 'a'. In this version, number of
          coefficients is equal to number of complex points where the function
-         is defined 
+         is defined
         """
         if debug:
             print('pade_coef_n')
@@ -427,10 +424,10 @@ class pade_stuff():
     def pade_coef_n_ls(self, a, b):
         """
         Subroutine pade_ls_coeficients() finds coefficient of Pade approximant
-         solving equation aX=b. The Least Squares method using 
-         numpy.linalg.lstsq is utilized. In this version, number of 
+         solving equation aX=b. The Least Squares method using
+         numpy.linalg.lstsq is utilized. In this version, number of
          coefficients is less then number of complex points where the function
-         is defined 
+         is defined
         """
         if debug:
             print('pade_coef_n_ls')
@@ -460,7 +457,7 @@ class pade_stuff():
         f -- input complex array with values of function in points e[i]
         """
         e = self.iw
-        f = self.f 
+        f = self.f
         if (nneg + npos) % 2 != 0:
             print('Number of chosen points should be even!',
                   nneg, npos, nneg + npos)
@@ -495,9 +492,9 @@ class pade_stuff():
     def choose_seq_points(self, npos, nneg):
         # Pick first nneg+npos points
         e = self.iw
-        f = self.f 
+        f = self.f
         if (nneg + npos) % 2 != 0:
-            print('Number of chosen points should be even!', 
+            print('Number of chosen points should be even!',
                   nneg, npos, nneg + npos)
             npos += 1
         ee = []
@@ -588,7 +585,7 @@ class pade_input():
         if (self.emax - self.emin) / self.npts != self.de:
             print('Check parameters of real energy')
             print('Continuation will be performed to interval'
-                  '[%5.2f,%5.2f] with step %4.3f' % 
+                  '[%5.2f,%5.2f] with step %4.3f' %
                   (self.emin, self.emax, self.de))
             self.npts = (self.emax - self.emin) // self.de
         if self.use_moments and self.m == (0.0, 0.0, 0.0):
