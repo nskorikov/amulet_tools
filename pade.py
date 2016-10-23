@@ -1,30 +1,43 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Program make analitical continuation of complex function defined on Matsubara
-# frequency to real energy using Pade approximant. Universal version.
+# frequency to real energy using Pade approximant.
+# Copyright (C) Nikolay Skorikov nskorikov@gmail.com
+
 import time
 import os.path
 import argparse
 import sys
 import random
 from math import ceil
+# import doctest
 
-debug = True
+debug = False
 
 
 def main():
     print('Start at %s ' % time.ctime())
     start_time = time.time()
+    # doctest.testmod()
     inp = pade_input()          # parsing of command line
     p = pade_stuff(inp)         # reading of sigma, preparation of sets,
                                 # selection of version keep it all in p
-    p.do_pade()                 # calc huge array of pade coefficient for sets
-                                # all non-physical solution are dropped
+    p.do_pade()
 
-    # results, deltas, solutions = do_pade(p)
+    end_time = time.time()
+    print('Stop at %s ' % time.ctime())
+    run_time = end_time - start_time
+    hour = (run_time // 60) // 60
+    minute = run_time // 60 - hour * 60
+    sec = run_time % 60
+    print('Program runtime = %i:%i:%i' % (hour, minute, sec))
+
 
 
 def analitical(f):
+    """
+    Check if imaginary part of function 'f' is negative and if so returns
+    'True', elese returns 'False'
+    """
     analitical = True
     for ff in f:
         if ff.imag > 0.0:
@@ -40,10 +53,23 @@ def residual(f1, f2):
     """
     l1 = len(f1)
     if l1 != len(f2):
-        raise('WARNING: calc_residual: Lengths of f1 and f2 are different!\n')
+        raise('calc_residual: Lengths of f1 and f2 are different!\n')
     d = sum([abs(f1[i] - f2[i]) for i in range(l1)])
     d /= l1
     return d
+
+def write_g_im(filename, e, sigma):
+    with open(filename, 'w') as f:
+        for ene, s in zip(e, sigma):
+            f.write('{0:18.8f}{1:18.12f}{2:18.12f}\n'.
+            format(ene.imag, s.real, s.imag))
+
+
+def write_g_re(filename, e, sigma):
+    with open(filename, 'w') as f:
+        for ene, s in zip(e, sigma):
+            f.write('{0:18.8f}{1:18.12f}{2:18.12f}\n'.
+            format(ene.real, s.real, s.imag))
 
 
 class pade_stuff():
@@ -55,8 +81,9 @@ class pade_stuff():
 
     def __init__(self, inp):
         self.m = inp.m
+        self.use_moments = inp.use_moments
         tmp = self.prepare_pade(inp)
-        self.sets = tmp[0]
+        self.initialsets = tmp[0]
         self.p_c = tmp[1]
         self.pade = tmp[2]
         self.points = tmp[3]
@@ -66,8 +93,12 @@ class pade_stuff():
         self.sigre = []
         self.sigim = []
         self.delta = []
+        self.sets = []
 
     def prepare_pade(self, ii):
+        """
+        Perform some preparational steps before constructing of Pade approximant
+        """
         sets = []
         for ipo in range(ii.npo[0], ii.npo[1], 1):
             for ine in range(ii.ne[0], ii.ne[1]):
@@ -78,10 +109,9 @@ class pade_stuff():
                 else:
                     nls = 1
                 for ils in range(0, nls, 2):
-                    for irand in range(0, ii.nrandomcycle):
+                    for irand in range(0, ii.nrand):
                         set = [ipo, ine, ils, irand]
                         sets.append(set)
-
         iw, sigma = self.readsigma(ii.infile)
         if ii.use_moments:
             self.make_f_prime(iw,sigma)
@@ -90,31 +120,50 @@ class pade_stuff():
         return sets, pade_coef, pade, points, iw, sigma, emesh
 
     def do_pade(self):
-        for s in self.sets:
+        for s in self.initialsets:
+            sys.stdout.write('[%4i %4i %4i] \r' % (s[0],s[1],s[2]))
+            sys.stdout.flush()
             iw1, f1 = self.points(s[0], s[1])
-            for ispin in range(nspin)
+            # for ispin in range(nspin)
             pq, success, solver = self.make_coef(s, iw1, f1)
             gr = self.pade(pq, self.e)
             if not analitical(gr):
-                print(len(self.sets))
-                self.sets.remove(s)
-                print(len(self.sets))
-                print('Set', s,'gives not analitical solution\n')
-#                 print(self.sets, '\n')
                 continue
             gi = self.pade(pq, self.iw)
             if not analitical(gi):
-                print('Set', s,'gives not analitical solution\n')
-                print(len(self.sets))
-                self.sets.remove(s)
-                print(len(self.sets))
                 continue
+            # outfile = 'reG_' + str(s[0]) + '_' + str(s[1]) + '_' + str(s[2]) + '.dat'
+            # write_g_re(outfile,self.e, gr)
+            # outfile = 'imG_' + str(s[0]) + '_' + str(s[1]) + '_' + str(s[2]) + '.dat'
+            # write_g_im(outfile,self.iw, gi)
+            self.sets.append(s)
             self.sigre.append(gr)
             self.sigim.append(gi)
             self.delta.append(residual(gi, self.f))
-        print(len(self.sets), len(self.sigre), len(self.sigim))
-        for d in self.delta:
-            print(d)
+        if len(self.sets) == 0:
+            print('There are no solutions for current set of parameters.\n'
+                  'Try another')
+        if debug:
+            print(len(self.sets), len(self.sigre), len(self.sigim))
+            for d in self.delta:
+                print(d)
+        self.analise()
+
+    def analise(self):
+        wgts = [1/d for d in self.delta]
+        wsum = sum(wgts)
+        wgts = [w/wsum for w in wgts]
+        result_sigre=[0.0 for ee in self.e]
+        for j in range(len(wgts)):
+            for i in range(len(self.e)):
+                result_sigre[i] += self.sigre[j][i] * wgts[j]
+        write_g_re('sigre.dat',self.e, result_sigre)
+        result_sigim=[complex(0.0) for iw in self.iw]
+        for j in range(len(wgts)):
+            for i in range(len(self.iw)):
+                result_sigim[i] += self.sigim[j][i] * wgts[j]
+        write_g_im('sigim.dat',self.iw, result_sigim)
+        # write_results()
 
     def make_coef(self, s, iw1, f1):
         m = len(iw1)
@@ -126,8 +175,6 @@ class pade_stuff():
             aa = []
             for j in range(0, r):
                 aa.append(iw1[i] ** j)
-#             a.append(aa)
-#             aa = []
             for j in range(r, 2 * r):
                 aa.append(-f1[i] * iw1[i] ** (j - r))
             a.append(aa)
@@ -155,7 +202,7 @@ class pade_stuff():
             else:
                 pade_coef = self.pade_coef_m
         else:
-            raise('mlib != numpy and mlib != numpy')
+            raise('mlib != numpy and mlib != mpmath')
         if ii.random:
             points = self.choose_prandom_points
         else:
@@ -195,7 +242,8 @@ class pade_stuff():
             nlinesperblock = (nlines + 2) // ndatasets
         else:
             nlinesperblock = nlines // ndatasets
-        print(" Number of datasets: %i " % ndatasets)
+        print(' Number of datasets: %i ' % ndatasets)
+        print('Only the last dataset will be used!')
 
         # nlinesperblock = nlines / ndatasets
         print(" Number of lines per block: %i " % nlinesperblock)
@@ -256,7 +304,8 @@ class pade_stuff():
             for i in range(0, r + 1):
                 q += pq[i + r] * e[iw] ** i
             f[iw] = np.divide(p, q)
-        return f.tolist()
+        # return  f.tolist()
+        return [complex(ff) for ff in f]
 
     def pade_n_m(self,coef,e):
         """
@@ -300,18 +349,19 @@ class pade_stuff():
             print('pade_m')
 
         nlines = len(e)
-        r = len(coef) / 2
+        r = len(coef) // 2
         f = mp.zeros(nlines, 1)
         for iw in range(0, nlines):
             p = mp.mpc(0.0)
             q = mp.mpc(0.0)
             for i in range(0, r):
                 p += coef[i] * e[iw] ** i
-            for i in range(0, r + 1):
+            for i in range(0, r):
                 q += coef[i + r] * e[iw] ** i
+            q += e[iw] ** (2*r)
             f[iw] = fdiv(p, q)
-        f = fp.matrix(f)
-        return f.tolist()
+        # f = fp.matrix(f)
+        return [complex(ff) for ff in f]
 
     def pade_m_m(self,coef,e):
         """
@@ -326,20 +376,20 @@ class pade_stuff():
         nlines = len(e)
         r = len(coef) // 2
         f = mp.zeros(nlines, 1)
-        pq = mp.ones(r * 2 + 1, 1)
         m = self.m
         for iw in range(0, nlines):
             p = mp.mpc(0.0)
             q = mp.mpc(0.0)
             for i in range(0, r):
                 p += coef[i] * e[iw] ** i
-            for i in range(0, r + 1):
+            for i in range(0, r):
                 q += coef[i + r] * e[iw] ** i
+            q += e[iw] ** (2*r)
             f[iw] = fdiv(p, q)
             f[iw] /= e[iw] ** 3
             f[iw] += m[0] / e[iw] + m[1] / (e[iw] ** 2) + m[2] / (e[iw] ** 3)
-        f = fp.matrix(f)
-        return f.tolist()
+        # f = fp.matrix(f)
+        return [complex(ff) for ff in f]
 
     def pade_coef_m(self, a, b):
         """
@@ -351,6 +401,7 @@ class pade_stuff():
         """
         if debug:
             print('pade_coef_m')
+        b = mp.matrix(b)
         solver = 'Mpmath inverse'
         try:
             a = mp.inverse(a)
@@ -435,6 +486,7 @@ class pade_stuff():
         #                       |p|
         #                   X = | |
         #                       |q|
+        solver = 'np.linalg.lstsq'
         try:
             x = np.linalg.lstsq(a, b)[0]
         except np.linalg.linalg.LinAlgError as err:
@@ -445,7 +497,7 @@ class pade_stuff():
                 raise
         else:
             success = True
-        return x, success
+        return x, success, solver
 
     def choose_prandom_points(self, npos, nneg):
         """
@@ -467,8 +519,8 @@ class pade_stuff():
         ee = []
         ff = []
         for i in range(0, nneg):
-            ee.append(mp.conj(e[nneg - 1 - i]))
-            ff.append(mp.conj(f[nneg - 1 - i]))
+            ee.append(e[nneg - 1 - i].conjugate())
+            ff.append(f[nneg - 1 - i].conjugate())
         for i in range(nneg, q - nrnd):
             ee.append(e[i - nneg])
             ff.append(f[i - nneg])
@@ -500,8 +552,8 @@ class pade_stuff():
         ee = []
         ff = []
         for i in range(0, nneg):
-            ee.append(e.conj()[nneg - 1 - i])
-            ff.append(f.conj()[nneg - 1 - i])
+            ee.append(e[nneg - 1 - i].conjugate())
+            ff.append(f[nneg - 1 - i].conjugate())
         for i in range(nneg, nneg + npos):
             ee.append(e[i - nneg])
             ff.append(f[i - nneg])
@@ -518,7 +570,7 @@ class pade_input():
         self.npts = commandline['npts']
         self.use_moments = commandline['use_moments']
         self.random = commandline['random']
-        self.nrandomcycle = commandline['nrandomcycle']
+        self.nrand = commandline['nrand']
         self.ls = commandline['ls']
         self.npo = commandline['npo']
         self.use_ne = commandline['use_ne']
@@ -539,6 +591,7 @@ class pade_input():
         """
         if self.mlib == 'auto':
             try:
+                global mp, im, re, fdiv, mpc, fp, workdps
                 from mpmath import mp, im, re, fdiv, mpc, fp, workdps
             except ImportError:
                 print('There are no mpmath module')
@@ -549,7 +602,6 @@ class pade_input():
                 else:
                     global np
             else:
-                global mp, im, re, fdiv, mpc, fp, workdps
                 fp.dps = 12
                 mp.prec = self.prec
         if self.mlib == 'mpmath':
@@ -572,10 +624,10 @@ class pade_input():
 
     def validate_input(self):
         if not self.random:
-            self.nrandomcycle = 1
-        if self.random and self.nrandomcycle == 1:
+            self.nrand = 1
+        if self.random and self.nrand == 1:
             print('You set switch "-random"')
-            raise ValueError('In such case you should set "-nrandomcycle">1')
+            raise ValueError('In such case you should set "-nrand">1')
         if not self.use_ne:
             self.ne = (0, 1)
         if not os.path.exists(self.infile):
@@ -624,7 +676,7 @@ class pade_input():
               ' with step %4.3f' % (self.emin, self.emax, self.de))
         print('Function from %s will be continued to real axis' % self.infile)
         print('Log of execution will be duplicated to %s' % self.logfile)
-        print('For mathematical tasks we will use "%s"' % self.mlib)
+        print('For mathematical tasks "%s" will be used' % self.mlib)
         if debug:
             ss = sys.modules
             if 'numpy' in ss:
@@ -639,7 +691,13 @@ class pade_input():
         Method defines possible commandline keys and them default values,
         parse commandline and return dictionary 'inputdata'
         """
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description=
+        'Program performs continuation of complex function defined on Matsubara'
+        ' frequency to real energy axis by Pade approximant. Calculation of Pade'
+        ' is realised over solving of linear equation as desctibed in '
+        '"PRB 93, 075104 (2016)". Weights coefficients for averiging are '
+        'calculated as inversion of a residual of the approximation of a '
+        'function. Description of parameters see below.')
         parser.add_argument('-f', default='g.dat',
                             help='file with input function '
                             '[default: %(default)s]')
@@ -667,28 +725,41 @@ class pade_input():
                             '[default: %(default)s]')
         parser.add_argument('-random', action='store_true',
                             help='Use or not randomly picked points in input '
-                            'set [default: %(default)s]')
-        parser.add_argument('-nrandomcycle', type=int, default=200,
+                            'set [default: %(default)s]. In random mode '
+                            'takes some first ordered points, than pick other '
+                            'points randomly. Amount of points to be picked '
+                            'randomly is defined randomly.')
+        parser.add_argument('-nrand', type=int, default=200,
                             help='number cycles with random points'
-                            '[default: %(default)i]')
+                            '[default: %(default)i]. This variable does not '
+                            'affects number of randomly picked points.')
         parser.add_argument('-ls', action='store_true',
                             help='Use non-diagonal form of Pade coefficients '
                             'matrix [default: %(default)s]')
         parser.add_argument('-npo', nargs=2, default=(10, 90), type=int,
-                            help='number of input iw points'
+                            help='The program takes first N points of input '
+                            'function to calculate continuation. During '
+                            'iterations N vary in range "npo"'
                             '[default: %(default)s]')
         parser.add_argument('-use_ne', action='store_true',
-                            help='use symmetry of input function: '
-                            'G(z^*)=G^*(z) [default: %(default)s]')
+                            help='Program can account symmetry of input function: '
+                            'G(z^*)=G^*(z). To do it, program adds to input '
+                            'data additional points with negative frequency '
+                            '[default: %(default)s]')
         parser.add_argument('-ne', nargs=2, default=(0, 5), type=int,
-                            help='number of negative iw points'
+                            help='number of negative iw points used to account '
+                            'symmetry of considered function'
                             '[default: %(default)s]')
         parser.add_argument('-mlib', default='numpy',
-                            help='Choose mathematical library: numpy or mpmath'
-                            ' or auto [default: %(default)s]')
+                            help='Choose mathematical library: numpy or mpmath '
+                            'or auto. Numpy is fatests. Mpmath allow to use '
+                            'arbitrary precision of numerical calculations '
+                            '[default: %(default)s]')
         parser.add_argument('-precision', type=int, default=256,
                             help='precision of floating point numbers (in '
-                            'bits) for use in mpmath [default: %(default)i]')
+                            'bits) for use in mpmath. Default value is '
+                            '"%(default)i" and matches to precision of 76 '
+                            'digits.')
         parser.add_argument('-debug', default='False',
                             help='debug mode [default: %(default)s]')
 
@@ -707,7 +778,7 @@ class pade_input():
                      'npo': args.npo,
                      'use_ne': args.use_ne,
                      'ne': args.ne,
-                     'nrandomcycle': args.nrandomcycle,
+                     'nrand': args.nrand,
                      'logfile': args.logfile,
                      'mlib': args.mlib,
                      'prec': args.precision
@@ -715,14 +786,6 @@ class pade_input():
 
         return inputdata
 
-
-def calc_residual(f1, f2):
-    l1 = len(f1)
-    if l1 != len(f2):
-        raise('WARNING: calc_residual: Lengths of f1 and f2 are different!\n')
-    d = pow(sum([pow(f1[i] - f2[i], 2) for i in range(l1)]), 0.5)
-    d /= l1
-    return float(abs(d))
 
 if __name__ == "__main__":
     main()

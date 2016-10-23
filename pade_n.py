@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-# coding=utf-8
-# Program make analitical continuation of complex function defined on Matsubara frequency
-# to real energy using Pade approximant. This version is Numpy based. 
+# Program make analitical continuation of complex function defined on Matsubara
+# frequency to real energy using Pade approximant. This version is Numpy based.
+# Copyright (C) Nikolay Skorikov nskorikov@gmail.com
 
 import sys
 import argparse
@@ -9,16 +9,10 @@ import os.path
 import numpy as np
 import time
 from numbers import Real
-# from math import exp
-# from scipy import linalg
-# import matplotlib.pyplot as plt
 
-def main(): 
-    print('Start at %s ' % time.ctime()) 
-    start_time = time.time()   
-    # size, smooth, source, target, concurrency = handle_commandline()
-
-    # infile, emin, de, npts, use_moments, randomp, ls, npo, use_ne, ne, m = handle_input()
+def main():
+    print('Start at %s ' % time.ctime())
+    start_time = time.time()
     handle_input()
     print_params(logfile)
     print_params()
@@ -46,9 +40,8 @@ def main():
             else:
                 qq2 = 1
             for q1 in range(0, qq2, 2):
-            # for q1 in range(0, ipo//4, 2):
                 sys.stdout.flush()
-                for qq in range(0, nrandomcycle):
+                for qq in range(0, nrand):
                     if (ine + ipo) % 2 != 0:
                         continue
 
@@ -80,8 +73,6 @@ def main():
                     if not is_imag_negative(w, sigim):
                         continue
                     delta = calc_residual(f, sigim)
-#                     if delta > 5.00001:
-#                         continue
                     if use_moments:
                         sigre = pade_m(pq, e, m)
                     else:
@@ -111,14 +102,14 @@ def main():
                     solutions.append(sigre)
 
                     # Write continued function to the disk
-                    if delta < 0.100000005:
-                        outfile = 'imG_' + str(ine) + '_' + str(ipo) + '_' + \
-                                  str(q1) + '_' + str(qq) + '.dat'
-                        write_g_im(outfile, w, sigim)
-
-                        outfile = 'reG_' + str(ine) + '_' + str(ipo) + '_' + \
-                                  str(q1) + '_' + str(qq) + '.dat'
-                        write_g_re(outfile, e, sigre)
+                    # if delta < 0.100000005:
+                    #     outfile = 'imG_' + str(ine) + '_' + str(ipo) + '_' + \
+                    #               str(q1) + '_' + str(qq) + '.dat'
+                    #     write_g_im(outfile, w, sigim)
+                    #
+                    #     outfile = 'reG_' + str(ine) + '_' + str(ipo) + '_' + \
+                    #               str(q1) + '_' + str(qq) + '.dat'
+                    #     write_g_re(outfile, e, sigre)
 
     mmean = np.mean(mmts, axis=0, dtype=np.float64)
     print('Mean moments: %12.3f %12.3f %12.3f' % (float(mmean[0]), float(mmean[1]), float(mmean[2])))
@@ -141,16 +132,17 @@ def main():
         f.write('\n\n\n')
 
     if qq == 0:
-        print('There are no solutions')
+        print(29*'=')
+        print('|| There are no solutions  ||')
+        print(29*'=')
         print("Stop at %s" % time.ctime())
         end_time = time.time()
         run_time = end_time - start_time
-        # print(run_time)
         hour = (run_time // 60) // 60
         minute = (run_time // 60) - (hour * 60)
         sec = run_time % 60
         print('Program runtime = %2i:%2i:%2i' % (hour, minute, sec))
-    
+
     analise(w1, solutions, e)
 
     print("Stop at %s" % time.ctime())
@@ -160,9 +152,8 @@ def main():
     hour = (run_time // 60) // 60
     minute = run_time // 60 - hour * 60
     sec = run_time % 60
-
     print('Program runtime = %i:%i:%i' % (hour, minute, sec))
-    
+
 
 def analise(w1, solutions, e):
 
@@ -182,80 +173,87 @@ def analise(w1, solutions, e):
         w1[i] = 1 / w1[i]
 
     w1sum = sum(w1)
-    w2sum = sum(w2)
     for i in range(0, qq):
         w1[i] /= w1sum
-        w2[i] /= w2sum
 
     sigre = np.zeros(len(e), dtype=np.complex128)
     for i in range(0, qq):
         sigre += solutions[i] * w1[i]
     outfile = 'solution_w1.dat'
     write_g_re(outfile, e, sigre)
-    sigre = np.zeros(len(e), dtype=np.complex128)
-    for i in range(0, qq):
-        sigre += solutions[i] * w2[i]
-    outfile = 'solution_w2.dat'
-    write_g_re(outfile, e, sigre)
     with open('weights.dat', 'w') as f:
         for i in range(0, qq):
-            s = '{:16.12f} {:16.12f} {:16.12f}\n'.format(float(w3[i]), float(w1[i]), float(w2[i]) * 10)
+            s = '{:16.12f} {:16.12f}\n'.format(float(w3[i]), float(w1[i]))
             # s = '{:d} {:16.12f} {:16.12f}\n'.format(i, float(w1[i]), float(w2[i]))
             f.write(s)
-    
+
     pass
 
 
 def handle_commandline():
     """
-    Subroutine defines possible commandline keys and them default values, parse commandline and 
-    return dictionary 'inputdata'  
+    Subroutine defines possible commandline keys and them default values, parse commandline and
+    return dictionary 'inputdata'
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f", default="g.dat",
-                        help="file with input function "
-                        "[default: %(default)s]")
-    parser.add_argument("-logfile", default="sets.dat",
-                        help="file for log, new data will be appended to existent"
-                        "[default: %(default)s]")
-    parser.add_argument("-emin", default=-10.0, type=float,
-                        help="minimum energy on real axis "
-                        "[default: %(default)d]")
-    parser.add_argument("-emax", default=10.0, type=float,
-                        help="maximum energy on real axis ")
-    parser.add_argument("-de", default=0.01, type=float,
-                        help="energy step on real axis "
-                        "[default: %(default)f]")
-    parser.add_argument("-npts", type=int, default=2000,
-                        help="number of points on real energy axis"
-                        "[default: %(default)i]")
-    parser.add_argument("-use_moments", action='store_true',
-                        help="Use or not external information about momenta"
-                        "[default: %(default)s]")
-    parser.add_argument("-m", nargs=3, type=float,
-                        help="first momenta of function: m0, m1, m2")
-    parser.add_argument("-pm", "--print_moments", action='store_true',
-                        help="Print or not estimated values of momenta"
-                        "[default: %(default)s]")
-    parser.add_argument("-random", action='store_true',
-                        help="Use or not randomly picked points in input set"
-                        "[default: %(default)s]")
-    parser.add_argument("-nrandomcycle", type=int, default=200,
-                        help="number cycles with random points"
-                        "[default: %(default)i]")
-    parser.add_argument("-ls", action='store_true',
-                        help="Use non-diagonal form of Pade coefficients matrix"
-                        "[default: %(default)s]")
-    parser.add_argument("-npo", nargs=2, default=(10, 120), type=int,
-                        help="number of input iw points"
-                        "[default: %(default)s]")
-    parser.add_argument("-use_ne", action='store_true',
-                        help="use symmetry of input function: G(z^*)=G^*(z)"
-                        "[default: %(default)s]")
-    parser.add_argument("-ne", nargs=2, default=(0, 5), type=int,
-                        help="number of negative iw points"
-                        "[default: %(default)s]")
-
+    parser = argparse.ArgumentParser(description=
+    'Program performs continuation of complex function defined on Matsubara'
+    ' frequency to real energy axis by Pade approximant. Calculation of Pade'
+    ' is realised over solving of linear equation as desctibed in '
+    '"PRB 93, 075104 (2016)". Weights coefficients for averiging are '
+    'calculated as inversion of a residual of the approximation of a '
+    'function. Description of parameters see below.')
+    parser.add_argument('-f', default='g.dat',
+                        help='file with input function '
+                        '[default: %(default)s]')
+    parser.add_argument('-logfile', default='sets.dat',
+                        help='file for log, new data will be appended to'
+                        ' existent [default: %(default)s]')
+    parser.add_argument('-emin', default=-10.0, type=float,
+                        help='minimum energy on real axis '
+                        '[default: %(default)d]')
+    parser.add_argument('-emax', default=10.0, type=float,
+                        help='maximum energy on real axis ')
+    parser.add_argument('-de', default=0.01, type=float,
+                        help='energy step on real axis '
+                        '[default: %(default)f]')
+    parser.add_argument('-npts', type=int, default=2000,
+                        help='number of points on real energy axis'
+                        '[default: %(default)i]')
+    parser.add_argument('-use_moments', action='store_true',
+                        help='Use or not external information about '
+                        'momenta [default: %(default)s]')
+    parser.add_argument('-m', nargs=3, default=(0.0, 0.0, 0.0), type=float,
+                        help='first momenta of function: m0, m1, m2')
+    parser.add_argument('-pm', '--print_moments', action='store_true',
+                        help='Print or not estimated values of momenta'
+                        '[default: %(default)s]')
+    parser.add_argument('-random', action='store_true',
+                        help='Use or not randomly picked points in input '
+                        'set [default: %(default)s]. In random mode '
+                        'takes some first ordered points, than pick other '
+                        'points randomly. Amount of points to be picked '
+                        'randomly is defined randomly.')
+    parser.add_argument('-nrand', type=int, default=200,
+                        help='number cycles with random points'
+                        '[default: %(default)i]. This variable does not '
+                        'affects number of randomly picked points.')
+    parser.add_argument('-ls', action='store_true',
+                        help='Use non-diagonal form of Pade coefficients '
+                        'matrix [default: %(default)s]')
+    parser.add_argument('-npo', nargs=2, default=(10, 90), type=int,
+                        help='The program takes first N points of input '
+                        'function to calculate continuation. During '
+                        'iterations N vary in range "npo"'
+                        '[default: %(default)s]')
+    parser.add_argument('-use_ne', action='store_true',
+                        help='Program can account symmetry of input function: '
+                        'G(z^*)=G^*(z). To do it, program adds to input '
+                        'data additional points with negative frequency '
+                        '[default: %(default)s]')
+    parser.add_argument('-ne', nargs=2, default=(0, 5), type=int,
+                        help='number of negative iw points used to account '
+                        'symmetry of considered function'
+                        '[default: %(default)s]')
     args = parser.parse_args()
 
     # this check should be moved to calling function
@@ -277,7 +275,7 @@ def handle_commandline():
                  # 'npo2':args.npo[1],
                  'use_ne': args.use_ne,
                  'ne': args.ne,
-                 'nrandomcycle': args.nrandomcycle,
+                 'nrand': args.nrand,
                  'logfile': args.logfile
                  }
 
@@ -287,11 +285,11 @@ def handle_commandline():
 def handle_input():
     """
     Subroutine defines global variables, set them using 'inputdata' dictionary from handle_commandline()
-    and performs some check of input data 
+    and performs some check of input data
     """
     # TODO! Move globals to header of module
     global emin, de, npts, use_moments, randomp, ls, npo, use_ne, ne, infile
-    global infile, logfile, m, nrandomcycle
+    global infile, logfile, m, nrand
     inputdata = handle_commandline()
     emin = inputdata['emin']
     de = inputdata['de']
@@ -299,9 +297,9 @@ def handle_input():
     use_moments = inputdata['use_moments']
     randomp = inputdata['random']
     if randomp:
-        nrandomcycle = inputdata['nrandomcycle']
+        nrand = inputdata['nrand']
     else:
-        nrandomcycle = 1
+        nrand = 1
     ls = inputdata['ls']
     npo = inputdata['npo']
     use_ne = inputdata['use_ne']
@@ -393,8 +391,8 @@ def choose_random_points(e, f, nneg, npos):
 
 def choose_prandom_points(e, f, nneg, npos):
     """
-    Subroutine selects from input nneg+npos points: first nneg+npos-nrnd points are selected 
-    sequently, then nrnd points are picked randomly. Number of randomly selected points nrnd 
+    Subroutine selects from input nneg+npos points: first nneg+npos-nrnd points are selected
+    sequently, then nrnd points are picked randomly. Number of randomly selected points nrnd
     is determined randomly in interval from 1/16 to 1/3 of total number of points.
     e -- input complex array with energy points
     f -- input complex array with values of function in points e[i]
@@ -563,7 +561,6 @@ def pade_ls_coefficients(f, e, n):
     #                       |p|
     #                   X = | |
     #                       |q|
-
     try:
         pq = np.linalg.lstsq(x, s)[0]
         success = True
@@ -659,7 +656,6 @@ def get_moments(coef):
     m[2] = p[n - 3] - p[n - 1] * q[n - 2] - (p[n - 2] - p[n - 1] * q[n - 1]) * q[n - 1]
     # s = '{0:16.8f} {1:16.8f} {2:16.8f}'.format(m.real[0], m.real[1], m.real[2])
     return m.real
-    # return s
 
 
 def readsigma(filename):
@@ -747,18 +743,11 @@ def write_g_re(filename, e, sigma):
         for iw,f in zip(e, sigma):
             s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.format(iw.real, f.real, f.imag)
             fout.write(s)
-#         for iw in range(0, nlines):
-#             s = '{0:5.3f}{1:16.8f}{2:16.8f}\n'.\
-#                 format(e.real[iw], sigma.real[iw], sigma.imag[iw])
-#             fout.write(s)
-
 
 def calc_residual(f1, f2):
     l1 = len(f1)
     if l1 != len(f2):
-        print('WARNING: calc_residual')
-        print('Lengths of f1 and f2 are different!\n')
-        raise
+        raise('Lengths of f1 and f2 are different!\n')
     d = np.power(np.sum(np.absolute(np.power(f1-f2, 2))), 0.5)
     d /= l1
     return d
@@ -776,13 +765,3 @@ def is_imag_negative(w, f):
 # Begin main
 if __name__ == "__main__":
     main()
-
-
-    # Plotting example
-    # nlines = len(e)
-    # diff = np.zeros(nlines, dtype=np.complex128)
-    # for i in range(0, len(e)):
-    #     diff[i] = float(z.real[i,0]-sigma.real[i]) + 1j * float(z.imag[i,0]-sigma.imag[i])
-    # plt.plot(e.imag, diff.real, '-', e.imag, diff.imag, '--')
-    # plt.plot(e.imag, z.real[:,0], '-', e.imag, z.imag[:,0], '-', e.imag, sigma.real, '--', e.imag, sigma.imag, '--')
-    # plt.show()
