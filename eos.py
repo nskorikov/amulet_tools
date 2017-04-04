@@ -20,7 +20,6 @@ def main():
     plsq = leastsq(cost, x0, args=(energies, vols, eos))
     print('Fitted parameters = {0}'.format(plsq[0]))
 
-
     plt.plot(vols, energies, 'ro')
 
     # plot the fitted curve on top
@@ -35,15 +34,15 @@ def main():
 def murnaghan(parameters, vol):
     """From Phys. Rev. B 28, 5480 (1983)"""
     e0, b0, b_p, v0 = parameters
-    E = e0 + b0 * vol / b_p * (((v0 / vol)**b_p) / (b_p - 1) + 1) - v0 * b0 / (b_p - 1.0)
-    return E
+    e = e0 + b0 * vol / b_p * (((v0 / vol)**b_p) / (b_p - 1) + 1) - v0 * b0 / (b_p - 1.0)
+    return e
 
 
 def birch_murnaghan(parameters, vol):
     """Birch-Murnaghan EOS"""
     e0, b0, b_p, v0 = parameters
-    vv0 = vol/v0
-    e = e0 + 9/16*b0*v0*((vv0**(2/3)-1)**3*b_p + (vv0**(2/3)-1)**2 * (6-4*vv0**(2/3)))
+    v0v = v0/vol
+    e = e0 + 9*b0*v0*((v0v**(2/3)-1)**3*b_p + (v0v**(2/3)-1)**2 * (6-4*v0v**(2/3)))/16
     return e
 
 
