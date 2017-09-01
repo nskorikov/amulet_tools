@@ -25,49 +25,21 @@ def main():
     vols = np.array(v)
     energies = np.array(e)
 
+    # eos = murnaghan
     eos = birch_murnaghan
     x0 = np.array([energies.mean(), 1.1, 1.1, vols.mean()])  # initial guess of parameters
     plsq = leastsq(cost, x0, args=(energies, vols, eos))
-    # print('Fitted parameters = {0}'.format(plsq[0]))
-    V0 = plsq[0][3]
-    B0 = plsq[0][1]
-    a0 = V0**(1/3)
+    if plsq[1]:
+        write_data(eos, plsq, energies, vols)
+    else:
+        print('Solution was not found')
 
-    print('V0(AA^3)  =  {:10.7f}'.format(V0))
-    print('a0       =  {:10.7f}'.format(a0))
-    print('E0(eV)   =  {:10.7f}'.format(plsq[0][0]))
-    print('B0       =  ', B0)
-    # print('B0(GPa)  =  ', B0 * aupress_gpa)
-    print('B0(Mbar) =  ', B0 * 1.6021765)
-    print('B1       =  {:10.7f}'.format(plsq[0][2]))
-
-    # eos = murnaghan
-    # x0 = np.array([energies.mean(), 0.1, 0.1, vols.mean()])  # initial guess of parameters
-    # plsq = leastsq(cost, x0, args=(energies, vols, eos))
-    # print('Fitted parameters = {0}'.format(plsq[0]))
-
-    plt.plot(vols, energies, 'ro')
-
-    # plot the fitted curve on top
-    x = np.linspace(min(38.0,min(vols)), max(max(vols),50.0), 50)
-    y = eos(plsq[0], x)
-    plt.plot(x, y, 'k-')
-    plt.xlabel('Volume, AA^3')
-    plt.ylabel('Energy, eV')
-    plt.savefig('nonlinear-curve-fitting1.eps')
-
-    with open('fit.dat', 'w') as f:
-        for xi, yi in zip(x,y):
-            f.write('{0:8.4f}{1:8.4f}\n'.format(xi, yi))
-        f.write('\n\n')
-        for V,E in zip(vols, energies):
-            f.write('{0:8.4f}{1:8.4f}\n'.format(V, E))
 
 def murnaghan(parameters, vol):
     """From Phys. Rev. B 28, 5480 (1983)"""
     e0, b0, b_p, v0 = parameters
-    E = e0 + b0 * vol / b_p * (((v0 / vol)**b_p) / (b_p - 1) + 1) - v0 * b0 / (b_p - 1.0)
-    return E
+    e = e0 + b0 * vol / b_p * (((v0 / vol)**b_p) / (b_p - 1) + 1) - v0 * b0 / (b_p - 1.0)
+    return e
 
 
 def birch_murnaghan(parameters, vol):
@@ -109,12 +81,54 @@ def read_data(fname):
         edft[i] -= -138538.444909219
     print('Zero of energy is shifted to -138538.444909219 eV')
 
-    for e1,e2 in zip(edft,edmft):
+    for e1, e2 in zip(edft, edmft):
         e.append(e1+e2)
 
     # for vv, ee in zip(V,E):
     #     print(vv,ee)
     return v, e
+
+
+def plot_picture(x, y, v, e):
+    plt.plot(v, e, 'ro')
+    plt.plot(x, y, 'k-')
+    plt.xlabel('Volume, AA^3')
+    plt.ylabel('Energy, eV')
+    plt.savefig('nonlinear-curve-fitting1.eps')
+
+
+def write_data(eos, results, e, v):
+
+    v0 = results[0][3]
+    b0 = results[0][1]
+    a0 = v0**(1/3)
+
+    x = np.linspace(min(36.0, min(v)), max(max(v), 50.0), 50)
+    y = eos(results[0], x)
+
+    print('V0(AA^3) =  {:10.7f}'.format(v0))
+    print('a0       =  {:10.7f}'.format(a0))
+    print('E0(eV)   =  {:10.7f}'.format(results[0][0]))
+    print('B0       =  {:10.7f}'.format(b0))
+    print('B0(Mbar) =  {:10.7f}'.format(b0 * 1.6021765))
+    print('B1       =  {:10.7f}'.format(results[0][2]))
+
+    with open('fit.dat', 'w') as f:
+        f.write('# V0(AA^3) =  {:10.7f}\n'.format(v0))
+        f.write('# a0       =  {:10.7f}\n'.format(a0))
+        f.write('# E0(eV)   =  {:10.7f}\n'.format(results[0][0]))
+        f.write('# B0       =  {:10.7f}\n'.format(b0))
+        f.write('# B0(Mbar) =  {:10.7f}\n'.format(b0 * 1.6021765))
+        f.write('# B1       =  {:10.7f}\n'.format(results[0][2]))
+        f.write('#\n')
+        for xi, yi in zip(x, y):
+            f.write('{0:8.4f}{1:8.4f}\n'.format(xi, yi))
+        f.write('\n\n')
+        for vi, ei in zip(v, e):
+            f.write('{0:8.4f}{1:8.4f}\n'.format(vi, ei))
+
+    plot_picture(x, y, v, e)
+
 
 if __name__ == "__main__":
     main()
