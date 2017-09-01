@@ -21,7 +21,7 @@ ae2aa3 = 0.148184711
 
 def main():
 
-    v, e = read_data('energy1.dat')
+    v, e, de = read_data('energy1.dat')
     vols = np.array(v)
     energies = np.array(e)
 
@@ -30,20 +30,24 @@ def main():
     x0 = np.array([energies.mean(), 1.1, 1.1, vols.mean()])  # initial guess of parameters
     plsq = leastsq(cost, x0, args=(energies, vols, eos))
     if plsq[1]:
-        write_data(eos, plsq, energies, vols)
+        write_data(eos, plsq, energies, vols, de)
     else:
         print('Solution was not found')
 
 
 def murnaghan(parameters, vol):
-    """From Phys. Rev. B 28, 5480 (1983)"""
+    """
+    EOS from Phys. Rev. B 28, 5480 (1983)
+    """
     e0, b0, b_p, v0 = parameters
     e = e0 + b0 * vol / b_p * (((v0 / vol)**b_p) / (b_p - 1) + 1) - v0 * b0 / (b_p - 1.0)
     return e
 
 
 def birch_murnaghan(parameters, vol):
-    """Birch-Murnaghan EOS"""
+    """
+    Birch-Murnaghan EOS
+    """
     e0, b0, b_p, v0 = parameters
     v0v = v0/vol
     e = e0 + 9/16*b0*v0*((v0v**(2/3)-1)**3*b_p + (v0v**(2/3)-1)**2 * (6-4*v0v**(2/3)))
@@ -51,9 +55,21 @@ def birch_murnaghan(parameters, vol):
 
 
 def cost(param, y, x, eos):
-    """Cost function"""
+    """
+    Cost function
+    """
     err = y - eos(param, x)
     return err
+
+
+def deviation(eos, param, y, x):
+    """
+    :param eos:  function for calculation
+    :param param:  array of functions parameters
+    :param x, y:  arrays of data points
+    :return:  value of standard deviation
+    """
+    return np.sum(np.square(cost(param, y, x, eos)))/len(x)
 
 
 def read_data(fname):
@@ -86,18 +102,19 @@ def read_data(fname):
 
     # for vv, ee in zip(V,E):
     #     print(vv,ee)
-    return v, e
+    return v, e, de
 
 
-def plot_picture(x, y, v, e):
-    plt.plot(v, e, 'ro')
+def plot_picture(x, y, v, e, de):
+    # plt.plot(v, e, 'ro')
+    plt.errorbar(v, e, yerr=de, fmt='o')
     plt.plot(x, y, 'k-')
     plt.xlabel('Volume, AA^3')
     plt.ylabel('Energy, eV')
     plt.savefig('nonlinear-curve-fitting1.eps')
 
 
-def write_data(eos, results, e, v):
+def write_data(eos, results, e, v, de):
 
     v0 = results[0][3]
     b0 = results[0][1]
@@ -114,6 +131,7 @@ def write_data(eos, results, e, v):
     print('B1       =  {:10.7f}'.format(results[0][2]))
 
     with open('fit.dat', 'w') as f:
+        f.write('# STD: {:10.7f}\n'.format(deviation(eos, results[0], e, v)))
         f.write('# V0(AA^3) =  {:10.7f}\n'.format(v0))
         f.write('# a0       =  {:10.7f}\n'.format(a0))
         f.write('# E0(eV)   =  {:10.7f}\n'.format(results[0][0]))
@@ -121,13 +139,15 @@ def write_data(eos, results, e, v):
         f.write('# B0(Mbar) =  {:10.7f}\n'.format(b0 * 1.6021765))
         f.write('# B1       =  {:10.7f}\n'.format(results[0][2]))
         f.write('#\n')
+        f.write('# Initial points:\n')
+        for vi, ei, dei in zip(v, e, de):
+            f.write('{0:8.4f}{1:8.4f}{2:8.4f}\n'.format(vi, ei, dei))
+        f.write('\n\n')
+        f.write('# Fitted data:\n')
         for xi, yi in zip(x, y):
             f.write('{0:8.4f}{1:8.4f}\n'.format(xi, yi))
-        f.write('\n\n')
-        for vi, ei in zip(v, e):
-            f.write('{0:8.4f}{1:8.4f}\n'.format(vi, ei))
 
-    plot_picture(x, y, v, e)
+    plot_picture(x, y, v, e, de)
 
 
 if __name__ == "__main__":
