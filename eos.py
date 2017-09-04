@@ -1,4 +1,4 @@
-from scipy.optimize import leastsq
+from scipy.optimize import curve_fit
 import numpy as np
 import matplotlib.pyplot as plt
 import re
@@ -27,13 +27,15 @@ def main():
 
     # eos = murnaghan
     eos = birch_murnaghan
-    x0 = np.array([energies.mean(), 1.1, 1.1, vols.mean()])  # initial guess of parameters
-    plsq = leastsq(cost, x0, args=(energies, vols, eos))
-    if plsq[1]:
-        write_data(eos, plsq, energies, vols, de)
-    else:
-        print('Solution was not found')
-
+    x0 = np.array([energies.mean(), 1.1, 1.1, vols.mean()])  # initial parameters
+    popt, pcov = curve_fit(func, xdata=vols, ydata=energies, sigma=de)
+    err = np.sqrt(np.diag(pcov))
+    # popt = leastsq(cost, x0, args=(energies, vols, eos))
+    # if popt[1]:
+    #     write_data(eos, popt, energies, vols, de)
+    # else:
+    #     print('Solution was not found')
+    write_data(eos, popt, err, energies, vols, de)
 
 def murnaghan(parameters, vol):
     """
@@ -49,6 +51,12 @@ def birch_murnaghan(parameters, vol):
     Birch-Murnaghan EOS
     """
     e0, b0, b_p, v0 = parameters
+    v0v = v0/vol
+    e = e0 + 9/16*b0*v0*((v0v**(2/3)-1)**3*b_p + (v0v**(2/3)-1)**2 * (6-4*v0v**(2/3)))
+    return e
+
+
+def func(vol, e0, b0, b_p, v0):
     v0v = v0/vol
     e = e0 + 9/16*b0*v0*((v0v**(2/3)-1)**3*b_p + (v0v**(2/3)-1)**2 * (6-4*v0v**(2/3)))
     return e
@@ -105,39 +113,32 @@ def read_data(fname):
     return v, e, de
 
 
-def plot_picture(x, y, v, e, de):
-    # plt.plot(v, e, 'ro')
-    plt.errorbar(v, e, yerr=de, fmt='o')
-    plt.plot(x, y, 'k-')
-    plt.xlabel('Volume, AA^3')
-    plt.ylabel('Energy, eV')
-    plt.savefig('nonlinear-curve-fitting1.eps')
+def write_data(eos, results, err, e, v, de):
 
-
-def write_data(eos, results, e, v, de):
-
-    v0 = results[0][3]
-    b0 = results[0][1]
+    v0 = results[3]
+    dv0 = err[3]
+    b0 = results[1]
+    db0 = err[1]
     a0 = v0**(1/3)
 
     x = np.linspace(min(36.0, min(v)), max(max(v), 50.0), 50)
-    y = eos(results[0], x)
+    y = eos(results, x)
 
-    print('V0(AA^3) =  {:10.7f}'.format(v0))
+    print('V0(AA^3) =  {:10.7f}+/-{:10.7f}'.format(v0, dv0))
     print('a0       =  {:10.7f}'.format(a0))
-    print('E0(eV)   =  {:10.7f}'.format(results[0][0]))
-    print('B0       =  {:10.7f}'.format(b0))
+    print('E0(eV)   =  {:10.7f}+/-{:10.7f}'.format(results[0], err[0]))
+    print('B0       =  {:10.7f}+/-{:10.7f}'.format(b0, db0))
     print('B0(Mbar) =  {:10.7f}'.format(b0 * 1.6021765))
-    print('B1       =  {:10.7f}'.format(results[0][2]))
+    print('B1       =  {:10.7f}+/-{:10.7f}'.format(results[2], err[2]))
 
     with open('fit.dat', 'w') as f:
-        f.write('# STD: {:10.7f}\n'.format(deviation(eos, results[0], e, v)))
-        f.write('# V0(AA^3) =  {:10.7f}\n'.format(v0))
+        f.write('# STD: {:10.7f}\n'.format(deviation(eos, results, e, v)))
+        f.write('#V0(AA^3) =  {:10.7f}+/-{:10.7f}\n'.format(v0, dv0))
         f.write('# a0       =  {:10.7f}\n'.format(a0))
-        f.write('# E0(eV)   =  {:10.7f}\n'.format(results[0][0]))
-        f.write('# B0       =  {:10.7f}\n'.format(b0))
+        f.write('# E0(eV)   =  {:10.7f}+/-{:10.7f}\n'.format(results[0], err[0]))
+        f.write('# B0       =  {:10.7f}+/-{:10.7f}\n'.format(b0, db0))
         f.write('# B0(Mbar) =  {:10.7f}\n'.format(b0 * 1.6021765))
-        f.write('# B1       =  {:10.7f}\n'.format(results[0][2]))
+        f.write('# B1       =  {:10.7f}+/-{:10.7f}\n'.format(results[2], err[2]))
         f.write('#\n')
         f.write('# Initial points:\n')
         for vi, ei, dei in zip(v, e, de):
@@ -147,7 +148,17 @@ def write_data(eos, results, e, v, de):
         for xi, yi in zip(x, y):
             f.write('{0:8.4f}{1:8.4f}\n'.format(xi, yi))
 
-    plot_picture(x, y, v, e, de)
+    # plot_picture(x, y, v, e, de)
+    plt.errorbar(v, e, yerr=de, fmt='.')
+    plt.text(40, -3.5, 'a0       =  {:10.7f}'.format(a0))
+    plt.text(40, -3.7, 'E0(eV)   =  {:10.7f}+/-{:10.7f}'.format(results[0],
+             deviation(eos, results, e, v)))
+    plt.text(40, -3.9, 'B0(Mbar) =  {:10.7f}'.format(b0 * 1.6021765))
+    plt.text(40, -4.1, 'B1       =  {:10.7f}'.format(results[2]))
+    plt.plot(x, y, 'k-')
+    plt.xlabel('Volume, AA^3')
+    plt.ylabel('Energy, eV')
+    plt.savefig('nonlinear-curve-fitting1.eps')
 
 
 if __name__ == "__main__":
