@@ -2,6 +2,7 @@ from scipy.optimize import curve_fit, OptimizeWarning
 import numpy as np
 import matplotlib.pyplot as plt
 import re
+import argparse
 
 # Bohr in SI units
 bohr_si = 0.52917720859e-10
@@ -21,9 +22,27 @@ ae2aa3 = 0.148184711
 
 def main():
 
-    fit1 = EosFit('energy1.dat', eos='birch_murnaghan', zeroenergy=-138538.444909219)
+    data_file, eos, zero_e = handle_commandline()
+
+    fit1 = EosFit(data_file, eos, zero_e)
     fit1.fit()
     fit1.write_data()
+
+
+def handle_commandline():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', default='energy1.dat',
+                        help='Name of file with input data\n'
+                        '[default: %(default)s]')
+    parser.add_argument('-eos', default='birch_murnaghan',
+                        help='Kind of EOS for fit, for now available Murnaghan '
+                             '(Phys. Rev. B 28, 5480 (1983) and Birch_Murnaghan equations\n'
+                             '[default: %(default)s]')
+    parser.add_argument('-zero_e', default=-138538.444909219,
+                        help='Shift initial energies closer to zero\n'
+                             '[default: %(default)s]. Does not ask why so.')
+    args = parser.parse_args()
+    return args.f, args.eos.lower(), args.zero_e
 
 
 class EosFit:
