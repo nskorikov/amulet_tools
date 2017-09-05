@@ -158,16 +158,29 @@ class EosFit:
             for xi, yi in zip(x, y):
                 f.write('{0:8.4f}{1:8.4f}\n'.format(xi, yi))
 
-        # plot_picture(x, y, v, e, de)
         plt.errorbar(self.vols, self.energies, yerr=self.sigma, fmt='.')
-        plt.text(40, -3.5, 'a0      =  {:10.7f}+/-{:10.7f}'.format(a0, da0))
-        plt.text(40, -3.7, 'E0(eV)  =  {:10.7f}+/-{:10.7f}'.format(self.eos_parameters[0],
-                                                                   self.deviation()))
-        plt.text(40, -3.9, 'B0(Mbar)=  {:10.7f}+/-{:10.7f}'.format(b0 * 1.6021765,
-                                                                   db0 * 1.6021765))
-        plt.text(40, -4.1, 'B1      =  {:10.7f}+/-{:10.7f}'.format(self.eos_parameters[2],
-                                                                   self.errors[2]))
         plt.plot(x, y, 'k-')
+
+        axis = plt.axis()
+
+        x_txt = axis[0]+5
+
+        dy = (axis[3]-axis[2])/15
+        y_txt = axis[3]-dy
+
+        plt.text(x_txt, y_txt, 'a0      =  {:10.7f}+/-{:10.7f}'.format(a0, da0))
+        y_txt -= dy
+
+        plt.text(x_txt, y_txt, 'E0(eV)  =  {:10.7f}+/-{:10.7f}'.format(self.eos_parameters[0],
+                                                                       self.deviation()))
+        y_txt -= dy
+
+        plt.text(x_txt, y_txt, 'B0(Mbar)=  {:10.7f}+/-{:10.7f}'.format(b0 * 1.6021765,
+                                                                       db0 * 1.6021765))
+        y_txt -= dy
+
+        plt.text(x_txt, y_txt, 'B1      =  {:10.7f}+/-{:10.7f}'.format(self.eos_parameters[2],
+                                                                       self.errors[2]))
         plt.xlabel('Volume, AA^3')
         plt.ylabel('Energy, eV')
         plt.savefig('nonlinear-curve-fitting1.eps')
