@@ -97,3 +97,6 @@ ENV/
 
 *.eps
 *.png
+
+# PyCharm stuff
+.idea/
