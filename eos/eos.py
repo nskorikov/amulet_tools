@@ -22,9 +22,9 @@ ae2aa3 = 0.148184711
 
 def main():
 
-    data_file, eos, zero_e = handle_commandline()
+    data_file, eos = handle_commandline()
 
-    fit1 = EosFit(data_file, eos, zero_e)
+    fit1 = EosFit(data_file, eos)
     fit1.fit()
     fit1.write_data()
 
@@ -38,11 +38,8 @@ def handle_commandline():
                         help='Kind of EOS for fit, for now available Murnaghan '
                              '(Phys. Rev. B 28, 5480 (1983) and Birch_Murnaghan equations\n'
                              '[default: %(default)s]')
-    parser.add_argument('-zero_e', default=-138538.444909219,
-                        help='Shift initial energies closer to zero\n'
-                             '[default: %(default)s]. Does not ask why so.')
     args = parser.parse_args()
-    return args.f, args.eos.lower(), args.zero_e
+    return args.f, args.eos.lower()
 
 
 class EosFit:
@@ -124,18 +121,12 @@ class EosFit:
         else:
             print('There are {:3d} input points for fit'.format(len(a)))
 
-        # TODO: add some automatic for this shift. But the shift should be
-        # conformed between different phases of one system.
-        # for i in range(len(edft)):
-        #     edft[i] -= self.zeroenergy
-
+        self.zeroenergy = np.min(edft)
         print('Zero of energy is shifted to {:17.9f} eV\n'.format(self.zeroenergy))
 
         for e1, e2 in zip(edft, edmft):
             e.append(e1+e2-self.zeroenergy)
 
-        # for vv, ee in zip(V,E):
-        #     print(vv,ee)
         return v, e, de
 
     def write_data(self):
